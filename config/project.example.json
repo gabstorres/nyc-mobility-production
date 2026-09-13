@@ -1,0 +1,35 @@
+{
+  "status": "example_only_not_runnable",
+  "platform": "databricks",
+  "storage": "class_r2",
+  "catalog": null,
+  "schemas": {
+    "control": null,
+    "bronze": null,
+    "silver": null,
+    "gold": null,
+    "analytics": null
+  },
+  "group_name": null,
+  "r2_group_prefix": null,
+  "landing_volume_path": null,
+  "reporting_timezone": "America/New_York",
+  "initial_proof_month": "2026-03",
+  "proof_months": [
+    "2026-03",
+    "2026-04",
+    "2026-05"
+  ],
+  "weather": {
+    "latitude": 40.7128,
+    "longitude": -74.006,
+    "coordinate_status": "proposed_city_representative",
+    "timezone": "UTC",
+    "model": null,
+    "hourly": [
+      "temperature_2m",
+      "precipitation",
+      "weather_code"
+    ]
+  }
+}
