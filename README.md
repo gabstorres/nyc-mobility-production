@@ -21,13 +21,15 @@ There is no pipeline run command yet. Add the exact Databricks runtime, dependen
 |---|---|
 | `config/` | Non-secret configuration examples and official source registry |
 | `src/ingestion/` | Python discovery, downloads, API requests, and ingestion orchestration |
-| `sql/` | SQL for profiling, control tables, transformations, analytics, and validation |
+| `sql/00_source_profile/` | Source profiling queries executed before transformation design is finalized |
+| `sql/01_ops/` | Batch state, run history, checkpoints, schema observations, and DQ results |
+| `sql/02_bronze/` | Bronze definitions, landing SQL, and Bronze validation |
+| `sql/03_silver/` | Cleaning, standardization, duplicate handling, and Silver validation |
+| `sql/04_integration/` | Taxi, zone, and weather joins plus join-coverage validation |
+| `sql/05_gold/`, `sql/06_analytics/` | Structural placeholders until the dimensional model is approved |
 | `notebooks/` | Thin Databricks entry points, avoiding duplicated business logic |
-| `ingestion/`, `bronze/`, `silver/` | Layer entry points and layer-specific implementation guidance |
-| `gold/`, `analytics/` | Structural placeholders until the dimensional model is approved |
-| `ops/`, `validation/`, `proof/` | Processing state, executable checks, and incremental/idempotency evidence |
 | `docs/` | Canonical architecture, model, dictionary, ingestion, decisions, validation |
-| `evidence/` | Small reviewed run summaries and proof results |
+| `evidence/`, `evidence/proof/` | Small reviewed run summaries and incremental/idempotency proof |
 | `.github/` | Pull request and work-item templates |
 
 GitHub stores code, configuration examples, documentation, and compact evidence. R2 stores raw files, raw JSON, and large outputs. Databricks hosts execution and persisted processing/DQ tables. Do not commit credentials, raw datasets, downloaded lecture PDFs, notebook outputs containing data, or local processing state.
