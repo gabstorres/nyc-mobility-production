@@ -4,6 +4,8 @@
 catalog: "<TODO_CATALOG_NAME>"
 
 schemas:
+  # Stores operational metadata created by sql/01_ops.
+  # sql/00_source_profile does not write here by default.
   control: "<TODO_CONTROL_SCHEMA>"
   bronze: "<TODO_BRONZE_SCHEMA>"
   silver: "<TODO_SILVER_SCHEMA>"
