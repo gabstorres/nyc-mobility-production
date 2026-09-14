@@ -1,77 +1,295 @@
-# Team workflow
+# Contributing
 
-## Source of work
-The [GitHub Project board](https://github.com/users/hyenalouise/projects/3) is the source of truth for project status.
-Each GitHub Issue must define:
-- expected outcome
-- prerequisites
-- acceptance evidence
-- owner
-- reviewer
-- affected documentation
+This document defines how the team develops, reviews, and safely runs the NYC Mobility pipeline.
 
-Do not maintain a separate backlog document.
+## Project tracking
 
-Before starting an issue:
+GitHub Issues and the NYC Mobility Pipeline GitHub Project are the canonical work trackers.
 
-1. Confirm its prerequisites are complete.
-2. Assign yourself.
-3. Move it to **In Progress**.
-4. Create a branch using the issue number.
-5. Keep design discussions and decisions in the issue comments.
+Before starting work:
+
+1. Confirm the issue is assigned to you.
+2. Confirm its prerequisites are complete.
+3. Move it to **In progress**.
+4. Assign a reviewer.
+5. Create one branch for the issue.
+
+## Branch naming
+
+Use:
+
+```text
+<type>/issue-<number>-<short-description>
+```
+
+Examples:
+
+```text
+docs/issue-3-naming-conventions
+profile/issue-10-taxi-source
+ingestion/issue-20-taxi-files
+silver/issue-27-clean-taxi
+test/issue-30-silver-validation
+```
+
+Do not combine unrelated issues in one branch.
+
+## Databricks Git folders
+
+Each teammate must use their own Databricks Git folder and development branch.
+
+Do not have multiple teammates perform Git operations in the same Databricks Git folder.
+
+Only the assigned integration owner should run approved code against shared demonstration tables.
+
+## Databricks namespaces
+
+The approved catalog is:
+
+```text
+ftw-week-08
+```
+
+The R2-backed source Volume is:
+
+```text
+`ftw-week-08`.`00-source`.`group_a_source`
+```
+
+Its workspace path is:
+
+```text
+/Volumes/ftw-week-08/00-source/group_a_source/
+```
+
+The proposed schemas are:
+
+```text
+`ftw-week-08`.`control`
+`ftw-week-08`.`bronze`
+`ftw-week-08`.`silver`
+`ftw-week-08`.`gold`
+`ftw-week-08`.`analytics`
+```
+
+The `control` schema will be created or verified by Issue #5 after Issue #3 is approved.
+
+## Source landing folders
+
+Use the existing folders:
+
+```text
+/Volumes/ftw-week-08/00-source/group_a_source/green_taxi/
+/Volumes/ftw-week-08/00-source/group_a_source/taxi_zones/
+/Volumes/ftw-week-08/00-source/group_a_source/weather/
+/Volumes/ftw-week-08/00-source/group_a_source/traffic_advisory/
+```
+
+Preserve original source filenames where practical:
+
+```text
+green_tripdata_2026-03.parquet
+green_tripdata_2026-04.parquet
+green_tripdata_2026-05.parquet
+taxi_zone_lookup.csv
+```
+
+Do not add `group_a_` to source filenames. The Volume provides group isolation.
+
+## Fully qualified references
+
+Every persisted table reference must use:
+
+```text
+catalog.schema.table
+```
+
+Example:
+
+```sql
+SELECT *
+FROM `ftw-week-08`.`bronze`.`green_taxi_raw`;
+```
+
+The catalog and schema names containing hyphens must be enclosed in backticks.
+
+SQL and notebook cells should work independently. Do not rely on a previous `USE CATALOG` or `USE SCHEMA` command.
+
+Always inspect the actual upstream table and column names before referencing them.
+
+## Approved table names
+
+### Control
+
+```text
+`ftw-week-08`.`control`.`pipeline_runs`
+`ftw-week-08`.`control`.`ingestion_batches`
+`ftw-week-08`.`control`.`data_quality_results`
+```
+
+### Bronze
+
+```text
+`ftw-week-08`.`bronze`.`green_taxi_raw`
+`ftw-week-08`.`bronze`.`open_meteo_weather_raw`
+`ftw-week-08`.`bronze`.`taxi_zones_raw`
+`ftw-week-08`.`bronze`.`dot_advisories_raw`
+```
+
+The DOT advisory table is optional.
+
+### Silver
+
+```text
+`ftw-week-08`.`silver`.`green_taxi_trips`
+`ftw-week-08`.`silver`.`weather_hourly`
+`ftw-week-08`.`silver`.`taxi_zones`
+```
+
+### Gold and Analytics
+
+Exact Gold and Analytics names require approval of the star schema in Issue #17.
+
+Approved patterns are:
+
+```text
+Gold fact: fact_<business_process>
+Gold dimension: dim_<business_entity>
+Analytics: <measure>_by_<dimensions>
+```
+
+Do not create provisional Gold tables before Issue #17 is approved.
+
+## Column naming
+
+Outside source-preserving Bronze fields:
+
+- Use lowercase `snake_case`.
+- Use `_id` for identifiers.
+- Use `_at` for timestamps.
+- Use `_date` for dates.
+- Use `_count` for counts.
+- Use `_amount` for currency.
+- Use `_flag` for Boolean indicators.
+
+Preserve source column names in Bronze where practical.
+
+Document every rename, type change, derived field, semantic change, and dropped field.
+
+## Write ownership
+
+Each shared table must have one accountable owner and one approved implementation path.
+
+| Area | Owner | Reviewer |
+|---|---|---|
+| Control and taxi ingestion | Crystal | Gab |
+| Weather ingestion and Silver weather | Gab | Bri |
+| Taxi-zone ingestion and standardization | Bri | Haze |
+| Silver taxi transformations | Bri | Haze |
+| Gold fact implementation | Ina | Crystal |
+| Gold dimensions | Assigned after Issue #17 | Assigned by review pair |
+| Analytics datasets and dashboard | Gab | Bri |
+| DQ contract, checks and dashboard | Haze | Ina |
+| Integration and final rerun | Ina | Crystal |
+
+Validation jobs may write through the approved `data_quality_results` contract. Haze owns that table’s contract.
+
+Do not upload or process another owner's source without coordinating with them. Every upload must be registered through the approved batch-control process.
 
 ## Review pairs
 
-| Owner | GitHub account | Primary reviewer |
-|---|---|---|
-| Ina | `@hyenalouise` | Crystal (`@bnnpddnftw`) |
-| Crystal | `@bnnpddnftw` | Gab (`@gabstorres`) |
-| Gab | `@gabstorres` | Bri (`@lustrousiana`) |
-| Bri | `@lustrousiana` | Haze (`@hazellecvs`) |
-| Haze | `@hazellecvs` | Ina (`@hyenalouise`) |
+| Author | Reviewer |
+|---|---|
+| Ina | Crystal |
+| Crystal | Gab |
+| Gab | Bri |
+| Bri | Haze |
+| Haze | Ina |
 
-Reviewing your assigned partner’s pull request is part of your project responsibility.
+## Development workflow
 
-When opening a pull request:
+Start from the latest `main`:
 
-1. Mention the assigned reviewer.
-2. Link the issue using `Closes #<issue-number>`.
-3. Include validation evidence.
-4. Do not merge without the required approval.
-5. If the assigned reviewer is unavailable, ask the group to assign another reviewer.
-
-## Start a work item
-
-Assign one owner and a different reviewer. Name branches `<type>/issue-<number>-<short-description>`, such as `setup/issue-7-repo-scaffold`, `profile/issue-10-taxi-source`, or `test/issue-31-may-rerun`.
-
-From your local clone or Databricks Git folder:
-
-```sh
+```bash
 git switch main
 git pull --ff-only
-git switch -c docs/source-profile
+git switch -c <branch-name>
 ```
 
-Edit, validate, inspect the diff, and stage only the intended paths:
+Inspect and commit only the intended files:
 
-```sh
+```bash
 git diff
-git add docs/source_profile.md
-git commit -m "Document taxi source profile"
-git push -u origin docs/source-profile
+git status
+git add <specific-paths>
+git commit -m "<clear description>"
+git push -u origin <branch-name>
 ```
 
-Open a pull request, attach relevant validation evidence, request review, and merge after review. Sync main before starting another task. Avoid simultaneous editing of a shared notebook. Each teammate should have their own Git folder/branch and isolated development output namespace.
+The pull request must include:
 
-One integration owner runs the approved code against the shared demonstration tables. Confirm catalog/schema privileges before defining namespaces. Do not allow parallel development jobs to overwrite shared control state or Gold tables.
+```text
+Closes #<issue-number>
+```
 
-## Review expectations
+It must explain:
 
-- Explain the problem, behavior, evidence, and remaining uncertainty.
-- Check grain, source field names, join cardinality, incremental scope, and rerun behavior.
-- Use fully qualified `catalog.schema.table` references; resolve actual names through approved configuration.
-- Critical DQ failures stop dependent layers. Record warnings with an owner and rationale.
-- Update the relevant canonical documents with the same change.
-- Never substitute identical row counts for a content-level idempotency proof.
+- What changed
+- Why it changed
+- How it was validated
+- Which documentation changed
+- What remains unverified
 
-Require a teammate review by team agreement; configure GitHub enforcement if available for the chosen account/repository plan. Everyone contributes code or documentation with meaningful commits. Do not commit secrets or downloaded source data.
+Do not merge without the required review.
+
+## Validation gates
+
+Do not build downstream layers on failing upstream layers.
+
+```text
+Frame
+→ Source Profile
+→ Ingestion Design
+→ Bronze
+→ Bronze Validation
+→ Silver
+→ Silver Validation
+→ Integration
+→ Gold
+→ Gold Validation
+→ Analytics
+→ Analytics Validation
+→ Dashboards
+→ Incremental and Idempotency Proof
+```
+
+Critical DQ failures stop publication of dependent trusted layers.
+
+The DQ dashboard may display failed runs. The business dashboard must only use validated Analytics results.
+
+## Incremental and rerun requirements
+
+Every ingestion implementation must explain:
+
+- What identifies a new or changed source
+- How processed batches are recorded
+- What prevents duplicate ingestion
+- When processing state advances
+- What happens after a partial failure
+- How the same batch can be rerun safely
+
+Processing state advances only after the corresponding load and required validation succeed.
+
+Identical row counts alone do not prove idempotency.
+
+## Security and repository hygiene
+
+Never commit:
+
+- R2 credentials
+- Databricks tokens
+- Passwords or secret values
+- Downloaded source datasets
+- Notebook outputs containing sensitive configuration
+
+Commit source code, SQL, documentation, non-secret configuration examples, and validation evidence.
