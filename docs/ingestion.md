@@ -1,3 +1,5 @@
+This document defines each source, ingestion method, incremental signal, batch identity, provenance, failure recovery, and rerun behavior.
+
 # Sources and ingestion contracts
 
 Status: proposed, source payloads not yet acquired or validated.

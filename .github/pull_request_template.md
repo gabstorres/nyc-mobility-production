@@ -1,19 +1,33 @@
-## Problem and resulting behavior
+## Summary
 
-Describe the final change and link the work item.
+What changed and why?
+
+## Related issue
+
+Closes #
+
+## Changes
+
+-
+-
 
 ## Validation
 
-State what was executed, the run/batch IDs and code revision, and link evidence. Label unexecuted checks as not yet validated.
+What did you run or check? Include counts or evidence when data is affected.
 
-## Engineering review
+- [ ] Change was tested
+- [ ] Rerunning the same input is safe, if applicable
+- [ ] Row counts and duplicates were checked, if applicable
+- [ ] No records are silently dropped
+- [ ] Not applicable — documentation/setup change
 
-- [ ] Grain, keys, and join cardinality are preserved or explicitly changed.
-- [ ] Row/measure deltas are explained; critical upstream gates pass.
-- [ ] Incremental behavior, unchanged reruns, revisions, and recovery are addressed where relevant.
-- [ ] Provenance remains traceable; no data or secrets were accidentally committed.
-- [ ] Canonical documentation is updated; any remaining stale document is identified.
+**Evidence:**
 
-## Assumptions or limitations
+## Documentation
 
-Record unresolved issues and any justified N/A checklist items.
+- [ ] Relevant documentation was updated
+- [ ] No documentation change required
+
+## Reviewer notes
+
+What should the reviewer check closely?

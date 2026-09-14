@@ -1,8 +1,48 @@
 # Team workflow
 
+## Source of work
+The [GitHub Project board](https://github.com/users/hyenalouise/projects/3) is the source of truth for project status.
+Each GitHub Issue must define:
+- expected outcome
+- prerequisites
+- acceptance evidence
+- owner
+- reviewer
+- affected documentation
+
+Do not maintain a separate backlog document.
+
+Before starting an issue:
+
+1. Confirm its prerequisites are complete.
+2. Assign yourself.
+3. Move it to **In Progress**.
+4. Create a branch using the issue number.
+5. Keep design discussions and decisions in the issue comments.
+
+## Review pairs
+
+| Owner | GitHub account | Primary reviewer |
+|---|---|---|
+| Ina | `@hyenalouise` | Crystal (`@bnnpddnftw`) |
+| Crystal | `@bnnpddnftw` | Gab (`@gabstorres`) |
+| Gab | `@gabstorres` | Bri (`@lustrousiana`) |
+| Bri | `@lustrousiana` | Haze (`@hazellecvs`) |
+| Haze | `@hazellecvs` | Ina (`@hyenalouise`) |
+
+Reviewing your assigned partner’s pull request is part of your project responsibility.
+
+When opening a pull request:
+
+1. Mention the assigned reviewer.
+2. Link the issue using `Closes #<issue-number>`.
+3. Include validation evidence.
+4. Do not merge without the required approval.
+5. If the assigned reviewer is unavailable, ask the group to assign another reviewer.
+
 ## Start a work item
 
-Assign one owner and a different reviewer. Use a small branch such as `feat/taxi-ingestion`, `feat/weather-ingestion`, `docs/source-profile`, or `test/may-rerun`.
+Assign one owner and a different reviewer. Name branches `<type>/issue-<number>-<short-description>`, such as `setup/issue-7-repo-scaffold`, `profile/issue-10-taxi-source`, or `test/issue-31-may-rerun`.
 
 From your local clone or Databricks Git folder:
 

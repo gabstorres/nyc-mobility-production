@@ -1,0 +1,32 @@
+# Placeholder configuration. Replace TODO values only after Issue #3 is approved.
+# Do not store credentials or R2 secrets in this file.
+
+catalog: "<TODO_CATALOG_NAME>"
+
+schemas:
+  # Stores operational metadata created by sql/01_ops.
+  # sql/00_source_profile does not write here by default.
+  control: "<TODO_CONTROL_SCHEMA>"
+  bronze: "<TODO_BRONZE_SCHEMA>"
+  silver: "<TODO_SILVER_SCHEMA>"
+  gold: "<TODO_GOLD_SCHEMA>"
+  analytics: "<TODO_ANALYTICS_SCHEMA>"
+
+tables:
+  control:
+    ingestion_batches: "<TODO_INGESTION_BATCHES_TABLE>"
+    data_quality_results: "<TODO_DATA_QUALITY_RESULTS_TABLE>"
+  bronze:
+    green_taxi: "<TODO_GREEN_TAXI_BRONZE_TABLE>"
+    weather: "<TODO_WEATHER_BRONZE_TABLE>"
+    taxi_zones: "<TODO_TAXI_ZONES_BRONZE_TABLE>"
+  silver:
+    green_taxi: "<TODO_GREEN_TAXI_SILVER_TABLE>"
+    weather_hourly: "<TODO_WEATHER_SILVER_TABLE>"
+    taxi_zones: "<TODO_TAXI_ZONES_SILVER_TABLE>"
+  gold:
+    # Gold names remain placeholders until the star schema is approved.
+    taxi_fact: "<TODO_GOLD_FACT_TABLE>"
+    date_dimension: "<TODO_DATE_DIMENSION_TABLE>"
+    zone_dimension: "<TODO_ZONE_DIMENSION_TABLE>"
+    weather_dimension: "<TODO_WEATHER_DIMENSION_TABLE>"

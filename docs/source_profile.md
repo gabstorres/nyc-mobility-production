@@ -1,3 +1,5 @@
+This document records each source's schema, volume, date coverage, nulls, duplicate candidates, keys, partitions, and anomalies.
+
 # Source profile
 
 Status: not yet executed. Listed source URLs are not proof of successful downloads or valid data.

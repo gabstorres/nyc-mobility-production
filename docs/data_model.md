@@ -1,3 +1,5 @@
+This document defines business questions, table grains, keys, facts, dimensions, relationships, and required measures.
+
 # Data model and business questions
 
 Status: proposed. Final keys require source profiling.
