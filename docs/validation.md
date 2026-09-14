@@ -1,3 +1,5 @@
+This document defines the evidence required to prove every pipeline layer is complete, repeatable, and trustworthy.
+
 # Validation and proof
 
 Status: no pipeline checks have been executed. Starter-file checks do not validate data.

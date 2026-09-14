@@ -10,7 +10,7 @@ Day 8 group project: build a repeatable NYC Green Taxi, historical weather, and 
 2. Confirm the actual Databricks catalog, permitted schemas, group R2 prefix, and mounted Volume path. Record non-secret values in a team configuration copied from `config/project.example.json`.
 3. Use the verified source links in [ingestion](docs/ingestion.md). Acquire immutable source copies and record checksums. Profile all three taxi months but process March first in the proof sequence.
 4. Complete [source profiling](docs/source_profile.md) and [field mapping](docs/data_dictionary.md). Review the source contracts before writing transformation SQL.
-5. Implement ingestion and March Bronze, pass validation, and only then advance to Silver and Gold.
+5. Implement ingestion and March Bronze, pass validation, and only then advance to Silver. Gold remains a placeholder until the star schema is approved.
 6. Add April, add May, rerun May, and capture the proof in [validation](docs/validation.md).
 
 There is no pipeline run command yet. Add the exact Databricks runtime, dependencies, configuration, job/notebook entry point, parameters, and rerun instructions when implementation is validated.
@@ -23,6 +23,9 @@ There is no pipeline run command yet. Add the exact Databricks runtime, dependen
 | `src/ingestion/` | Python discovery, downloads, API requests, and ingestion orchestration |
 | `sql/` | SQL for profiling, control tables, transformations, analytics, and validation |
 | `notebooks/` | Thin Databricks entry points, avoiding duplicated business logic |
+| `ingestion/`, `bronze/`, `silver/` | Layer entry points and layer-specific implementation guidance |
+| `gold/`, `analytics/` | Structural placeholders until the dimensional model is approved |
+| `ops/`, `validation/`, `proof/` | Processing state, executable checks, and incremental/idempotency evidence |
 | `docs/` | Canonical architecture, model, dictionary, ingestion, decisions, validation |
 | `evidence/` | Small reviewed run summaries and proof results |
 | `.github/` | Pull request and work-item templates |

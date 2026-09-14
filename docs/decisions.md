@@ -1,3 +1,5 @@
+This document records important engineering decisions, their reasons, rejected alternatives, assumptions, and consequences.
+
 # Decision log
 
 Record problem, decision, reason, rejected alternative, assumption, consequence, status and reviewer. Priority: correctness > reliability > maintainability > scalability > observability > efficiency.

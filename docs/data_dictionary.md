@@ -1,3 +1,5 @@
+This document defines the meaning, source, type, nullability, transformation, and destination of every retained field.
+
 # Field dictionary and source-to-target mapping
 
 Status: mapping template. Confirm actual input and upstream table names before SQL. Use snake_case and fully qualified `catalog.schema.table` references. No silent renames or drops.

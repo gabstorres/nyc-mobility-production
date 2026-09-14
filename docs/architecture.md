@@ -1,3 +1,5 @@
+This document explains how data moves from external sources through Ingestion, Bronze, Silver, Gold, and Analytics.
+
 # Architecture
 
 Status: proposed, not deployed. Platform: Databricks + class R2.

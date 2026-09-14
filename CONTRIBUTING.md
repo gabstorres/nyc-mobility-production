@@ -2,7 +2,7 @@
 
 ## Start a work item
 
-Assign one owner and a different reviewer. Use a small branch such as `feat/taxi-ingestion`, `feat/weather-ingestion`, `docs/source-profile`, or `test/may-rerun`.
+Assign one owner and a different reviewer. Name branches `<type>/issue-<number>-<short-description>`, such as `setup/issue-7-repo-scaffold`, `profile/issue-10-taxi-source`, or `test/issue-31-may-rerun`.
 
 From your local clone or Databricks Git folder:
 
