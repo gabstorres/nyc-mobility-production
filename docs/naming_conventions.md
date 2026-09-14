@@ -1,53 +1,162 @@
-This document defines approved catalog, schema, table, column, and file naming conventions.
+This document defines the approved catalog, schema, table, column, source-file, and path naming conventions.
 
 # Naming conventions
+## Catalog
 
-Status: **Placeholder — pending Issue #3 approval.**
+The project uses:
+
+```text
+ftw-week-08
+```
+
+Because the catalog name contains hyphens, SQL references must enclose it in backticks.
+
+## Source Volume
+
+The R2-backed source Volume is:
+
+```text
+`ftw-week-08`.`00-source`.`group_a_source`
+```
+
+Workspace path:
+
+```text
+/Volumes/ftw-week-08/00-source/group_a_source/
+```
+
+The source Volume contains:
+
+```text
+green_taxi/
+taxi_zones/
+weather/
+traffic_advisory/
+```
+
+Original source filenames are preserved where practical. The Volume path supplies group isolation, so source filenames do not use a `group_a_` prefix.
+
+## Schemas
+
+| Purpose | Namespace |
+|---|---|
+| Control | `ftw-week-08`.`control` |
+| Bronze | `ftw-week-08`.`bronze` |
+| Silver | `ftw-week-08`.`silver` |
+| Gold | `ftw-week-08`.`gold` |
+| Analytics | `ftw-week-08`.`analytics` |
+
+The source Volume remains in the existing `00-source` schema.
 
 ## Fully qualified references
 
-Every persisted table must be referenced as:
+Every persisted table reference must use:
 
 ```text
-<catalog>.<schema>.<table>
+catalog.schema.table
 ```
 
-## Namespace placeholders
+Example:
 
-| Layer | Placeholder |
+```sql
+SELECT *
+FROM `ftw-week-08`.`silver`.`green_taxi_trips`;
+```
+
+Do not depend on hidden `USE CATALOG` or `USE SCHEMA` state.
+
+## Table names
+
+### Control
+
+| Purpose | Table |
 |---|---|
-| Control | `<TODO_CATALOG_NAME>.<TODO_CONTROL_SCHEMA>` |
-| Bronze | `<TODO_CATALOG_NAME>.<TODO_BRONZE_SCHEMA>` |
-| Silver | `<TODO_CATALOG_NAME>.<TODO_SILVER_SCHEMA>` |
-| Gold | `<TODO_CATALOG_NAME>.<TODO_GOLD_SCHEMA>` |
-| Analytics | `<TODO_CATALOG_NAME>.<TODO_ANALYTICS_SCHEMA>` |
+| Pipeline executions | `pipeline_runs` |
+| External source batches | `ingestion_batches` |
+| Validation results | `data_quality_results` |
 
-## Proposed table patterns
+### Bronze
 
-These patterns require team approval in Issue #3.
-
-| Layer | Proposed pattern |
+| Source | Table |
 |---|---|
-| Bronze | `<source>_raw` |
-| Silver | `<business_entity>` |
-| Gold fact | `fact_<business_process>` |
-| Gold dimension | `dim_<business_entity>` |
-| Analytics | `<measure>_by_<dimension>` |
-| Control | `<operational_purpose>` |
+| Green Taxi | `green_taxi_raw` |
+| Open-Meteo | `open_meteo_weather_raw` |
+| Taxi Zones | `taxi_zones_raw` |
+| DOT advisories | `dot_advisories_raw` |
+
+The DOT advisory table is optional.
+
+### Silver
+
+| Entity | Table |
+|---|---|
+| Green Taxi trips | `green_taxi_trips` |
+| Hourly weather | `weather_hourly` |
+| Taxi zones | `taxi_zones` |
+
+### Gold
+
+Exact names require approval in Issue #17.
+
+Patterns:
+
+```text
+fact_<business_process>
+dim_<business_entity>
+```
+
+### Analytics
+
+Exact names depend on the approved business-question outputs.
+
+Pattern:
+
+```text
+<measure>_by_<dimensions>
+```
+
+## Control-table grains
+
+### `pipeline_runs`
+
+One row per pipeline execution.
+
+### `ingestion_batches`
+
+One row per external source batch or source version.
+
+### `data_quality_results`
+
+One row per validation check per run, batch, and target table.
 
 ## Column conventions
 
 - Use lowercase `snake_case` outside source-preserving Bronze columns.
-- Use `_id` for identifiers, `_at` for timestamps, and `_date` for dates.
-- Use `_count` for counts, `_amount` for currency, and `_flag` for Boolean indicators.
+- Use `_id` for identifiers.
+- Use `_at` for timestamps.
+- Use `_date` for dates.
+- Use `_count` for counts.
+- Use `_amount` for currency.
+- Use `_flag` for Boolean indicators.
 - Preserve source column names in Bronze where practical.
 - Document every rename, type change, derived field, semantic change, and dropped field.
 
-## Approval
+## File and batch naming
 
-- [ ] Team approved the catalog.
-- [ ] Team approved the schemas.
-- [ ] Team approved table patterns and names.
-- [ ] `config/project.example.json` was updated with the approved non-secret values.
+Preserve official source filenames:
 
-Approval date: `<TODO_APPROVAL_DATE>`
+```text
+green_tripdata_2026-03.parquet
+green_tripdata_2026-04.parquet
+green_tripdata_2026-05.parquet
+taxi_zone_lookup.csv
+```
+
+Generated Open-Meteo artifacts must be stored under a batch-specific directory:
+
+```text
+weather/<batch_id>/response.json
+weather/<batch_id>/weather_hourly.csv
+```
+
+A filename does not prove that a batch is new. The ingestion process must also register the source identifier, version, content hash, batch ID, and processing status.
