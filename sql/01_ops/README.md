@@ -1,4 +1,4 @@
-# 01 — Operations
+# 01 — Control
 
 Contains SQL for ingestion batches, pipeline runs, processing checkpoints, schema observations, and data-quality results.
 
