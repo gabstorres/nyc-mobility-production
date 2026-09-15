@@ -62,17 +62,38 @@ Its workspace path is:
 /Volumes/ftw-week-08/00-source/group_a_source/
 ```
 
-The proposed schemas are:
+Every schema carries the number of its pipeline stage, following the existing
+`00-source` schema. The number is the stage, so the same number means the same
+thing in the catalog browser and in `sql/`.
+
+The approved schemas are:
 
 ```text
-`ftw-week-08`.`control`
-`ftw-week-08`.`bronze`
-`ftw-week-08`.`silver`
-`ftw-week-08`.`gold`
-`ftw-week-08`.`analytics`
+`ftw-week-08`.`00-source`      (existing, source Volume only)
+`ftw-week-08`.`01-control`
+`ftw-week-08`.`02-bronze`
+`ftw-week-08`.`03-silver`
+`ftw-week-08`.`05-gold`
+`ftw-week-08`.`06-analytics`
 ```
 
-The `control` schema will be created or verified by Issue #5 after Issue #3 is approved.
+Stage numbers map to the repository layout:
+
+| Stage | Repository folder | Schema |
+|---|---|---|
+| 00 Source | `sql/00_source_profile/` | `00-source` (Volume only, no tables) |
+| 01 Control | `sql/01_control/` | `01-control` |
+| 02 Bronze | `sql/02_bronze/` | `02-bronze` |
+| 03 Silver | `sql/03_silver/` | `03-silver` |
+| 04 Integration | `sql/04_integration/` | none; integration is a transformation step whose outputs land in Gold |
+| 05 Gold | `sql/05_gold/` | `05-gold` |
+| 06 Analytics | `sql/06_analytics/` | `06-analytics` |
+
+There is deliberately no `04-` schema. Do not renumber Gold and Analytics to
+close the gap: the gap is cheaper than a number that means one stage in `sql/`
+and a different stage in the catalog.
+
+The `01-control` schema will be created or verified by Issue #5 after Issue #3 is approved.
 
 ## Source landing folders
 
@@ -108,10 +129,13 @@ Example:
 
 ```sql
 SELECT *
-FROM `ftw-week-08`.`bronze`.`green_taxi_raw`;
+FROM `ftw-week-08`.`02-bronze`.`green_taxi_raw`;
 ```
 
-The catalog and schema names containing hyphens must be enclosed in backticks.
+Catalog and schema names that contain hyphens or begin with a digit must be
+enclosed in backticks. Every schema in this project meets both conditions, so
+backticks are mandatory on every catalog and schema reference. Table names stay
+unquoted-safe: they never begin with a digit and never contain hyphens.
 
 SQL and notebook cells should work independently. Do not rely on a previous `USE CATALOG` or `USE SCHEMA` command.
 
@@ -122,18 +146,18 @@ Always inspect the actual upstream table and column names before referencing the
 ### Control
 
 ```text
-`ftw-week-08`.`control`.`pipeline_runs`
-`ftw-week-08`.`control`.`ingestion_batches`
-`ftw-week-08`.`control`.`data_quality_results`
+`ftw-week-08`.`01-control`.`pipeline_runs`
+`ftw-week-08`.`01-control`.`ingestion_batches`
+`ftw-week-08`.`01-control`.`data_quality_results`
 ```
 
 ### Bronze
 
 ```text
-`ftw-week-08`.`bronze`.`green_taxi_raw`
-`ftw-week-08`.`bronze`.`open_meteo_weather_raw`
-`ftw-week-08`.`bronze`.`taxi_zones_raw`
-`ftw-week-08`.`bronze`.`dot_advisories_raw`
+`ftw-week-08`.`02-bronze`.`green_taxi_raw`
+`ftw-week-08`.`02-bronze`.`open_meteo_weather_raw`
+`ftw-week-08`.`02-bronze`.`taxi_zones_raw`
+`ftw-week-08`.`02-bronze`.`dot_advisories_raw`
 ```
 
 The DOT advisory table is optional.
@@ -141,9 +165,9 @@ The DOT advisory table is optional.
 ### Silver
 
 ```text
-`ftw-week-08`.`silver`.`green_taxi_trips`
-`ftw-week-08`.`silver`.`weather_hourly`
-`ftw-week-08`.`silver`.`taxi_zones`
+`ftw-week-08`.`03-silver`.`green_taxi_trips`
+`ftw-week-08`.`03-silver`.`weather_hourly`
+`ftw-week-08`.`03-silver`.`taxi_zones`
 ```
 
 ### Gold and Analytics
