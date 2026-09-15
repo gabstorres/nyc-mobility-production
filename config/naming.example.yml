@@ -8,12 +8,14 @@ source:
   volume: "group_a_source"
   volume_path: "/Volumes/ftw-week-08/00-source/group_a_source"
 
+# Schema names are "<stage-number>-<layer>" and always require backticks in SQL.
+# Stage 04 (integration) has no schema; its outputs land in Gold.
 schemas:
-  control: "control"
-  bronze: "bronze"
-  silver: "silver"
-  gold: "gold"
-  analytics: "analytics"
+  control: "01-control"
+  bronze: "02-bronze"
+  silver: "03-silver"
+  gold: "05-gold"
+  analytics: "06-analytics"
 
 tables:
   control:

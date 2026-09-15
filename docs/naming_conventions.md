@@ -38,15 +38,34 @@ Original source filenames are preserved where practical. The Volume path supplie
 
 ## Schemas
 
-| Purpose | Namespace |
-|---|---|
-| Control | `ftw-week-08`.`control` |
-| Bronze | `ftw-week-08`.`bronze` |
-| Silver | `ftw-week-08`.`silver` |
-| Gold | `ftw-week-08`.`gold` |
-| Analytics | `ftw-week-08`.`analytics` |
+Schema names are `<stage-number>-<layer>`, extending the existing `00-source`
+schema. The number is the pipeline stage and matches the `sql/` folder for that
+stage, so schemas sort in pipeline order in the catalog browser and nobody has to
+guess which schema a folder writes to.
 
-The source Volume remains in the existing `00-source` schema.
+| Stage | What lands here | Namespace | Repository folder |
+|---|---|---|---|
+| 00 | Source: raw source files as received, no tables | `ftw-week-08`.`00-source` | `sql/00_source_profile/` |
+| 01 | Control: pipeline runs, ingestion batches, DQ results | `ftw-week-08`.`01-control` | `sql/01_control/` |
+| 02 | Bronze: source landed as tables with provenance, unchanged | `ftw-week-08`.`02-bronze` | `sql/02_bronze/` |
+| 03 | Silver: typed, standardized, deduplicated, same grain | `ftw-week-08`.`03-silver` | `sql/03_silver/` |
+| 04 | Integration: joins across sources; no tables of its own | none | `sql/04_integration/` |
+| 05 | Gold: approved facts and built dimensions | `ftw-week-08`.`05-gold` | `sql/05_gold/` |
+| 06 | Analytics: one dataset per approved business question | `ftw-week-08`.`06-analytics` | `sql/06_analytics/` |
+
+What each stage is responsible for is defined in
+[architecture.md](architecture.md). This document only fixes the names.
+
+Integration has no schema of its own. It is a transformation step between Silver
+and Gold, and its outputs land in Gold. Stage 04 is therefore skipped at the
+schema level rather than renumbering Gold and Analytics.
+
+The source Volume remains in the existing `00-source` schema. No project tables
+are created in `00-source`.
+
+Because every schema name contains a hyphen and begins with a digit, backticks
+are mandatory on schema references. Table and column names must not begin with a
+digit and must not contain hyphens.
 
 ## Fully qualified references
 
@@ -60,7 +79,7 @@ Example:
 
 ```sql
 SELECT *
-FROM `ftw-week-08`.`silver`.`green_taxi_trips`;
+FROM `ftw-week-08`.`03-silver`.`green_taxi_trips`;
 ```
 
 Do not depend on hidden `USE CATALOG` or `USE SCHEMA` state.

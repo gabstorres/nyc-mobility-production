@@ -5,11 +5,11 @@
   "catalog": "ftw-week-08",
   "schemas": {
     "source": "00-source",
-    "control": "control",
-    "bronze": "bronze",
-    "silver": "silver",
-    "gold": "gold",
-    "analytics": "analytics"
+    "control": "01-control",
+    "bronze": "02-bronze",
+    "silver": "03-silver",
+    "gold": "05-gold",
+    "analytics": "06-analytics"
   },
   "group_name": "group_a",
   "r2_group_prefix": null,
