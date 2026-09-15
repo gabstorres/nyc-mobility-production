@@ -14,15 +14,84 @@ Compare the March, April, and May schemas before accepting a source contract. Do
 
 | Source | Rows | Schema | Observed Dates | Key Nulls | Duplicate Candidates | Other Anomalies | Evidence |
 |---|---:|---|---|---|---|---|---|
-| Taxi March 2026 | Pending | Pending | Pending | Pending | Pending | Pending | Pending |
-| Taxi April 2026 | Pending | Pending | Pending | Pending | Pending | Pending | Pending |
-| Taxi May 2026 | Pending | Pending | Pending | Pending | Pending | Pending | Pending |
+| Taxi March 2026 | 44,208 | 21 cols, identical across files | 2026-03 dominant; 9 stray rows (1× 2009-01, 8× 2026-02) | `ehail_fee` 100%; 6 other cols ~15% (same rows) | 0 exact duplicates | 111 negative fares, 368 zero-distance/high-fare, 1 dropoff-before-pickup | `notebooks/profile_green_taxi_tripdata.ipynb` |
+| Taxi April 2026 | 44,238 | 21 cols, identical across files | 2026-04 dominant; 3 stray rows (1× 2026-03, 2× 2026-05) | `ehail_fee` 100%; 6 other cols ~14% (same rows) | 0 exact duplicates | 153 negative fares, 439 zero-distance/high-fare | `notebooks/profile_green_taxi_tripdata.ipynb` |
+| Taxi May 2026 | 44,921 | 21 cols, identical across files | 2026-05 dominant; 10 stray rows (2× 2008-12, 8× 2026-04) | `ehail_fee` 100%; 6 other cols ~13% (same rows) | 0 exact duplicates | 120 negative fares, 548 zero-distance/high-fare | `notebooks/profile_green_taxi_tripdata.ipynb` |
 | Taxi zones | 265 | `LocationID`, `Borough`, `Zone`, `service_zone` | Snapshot | 0 nulls across all columns | No duplicate `LocationID` values found | Sentinel records found at `LocationID` 264 and 265; special Borough values include `EWR`, `N/A`, and `Unknown` | `notebooks/profile_taxi_zones` |
 | Weather (Open-Meteo) | 2,208 | `time`, `temperature_2m`, `precipitation`, `weather_code` | 2026-03-01T00:00 to 2026-05-31T23:00 (UTC), no gaps | 0 nulls across all columns | No duplicate `time` values found | 12 distinct `weather_code` values; 0 rows with negative precipitation or out-of-range temperature; requested coordinates snapped to a grid point ~3-4 km away (40.738136, -74.04254, elevation 32.0m) | `notebooks/profile_open_meteo.ipynb` |
 
 Profile null rates for every column, full-row equality, candidate-key collisions, within-file and across-file duplicate candidates, unexpected codes, negative or zero measures, missing timestamps, durations, out-of-month events, and pickup and drop-off reference coverage.
 
 The public taxi schema does not establish a unique trip ID. Do not treat `VendorID` as a vehicle or trip key.
+
+## Green Taxi Trip Data Source Profile
+
+### Source Details
+
+- **Source files:** `green_tripdata_2026-03.parquet`, `-04.parquet`, `-05.parquet`
+- **Source path:** `/Volumes/ftw-week-08/00-source/group_a_source/green_taxi/`
+- **File format:** Parquet
+- **Dataset type:** Monthly trip-level extract, ingested incrementally (`COPY INTO`)
+- **Profiling notebook:** `notebooks/profile_green_taxi_tripdata.ipynb`
+
+### Dataset Schema
+
+21 columns, identical set and types across all 3 files (no schema drift). Includes `VendorID`, `lpep_pickup_datetime`/`lpep_dropoff_datetime` (`timestamp_ntz`), `RatecodeID`, `PULocationID`/`DOLocationID`, `passenger_count`, `trip_distance`, `fare_amount`, `total_amount`, `payment_type`, `trip_type`, and surcharge/fee fields.
+
+### Row Count
+
+44,208 / 44,238 / 44,921 rows (March/April/May), 133,367 total. Matches the row count landed in `dev_crystal.green_taxi_tripdata` exactly — no rows lost during `COPY INTO`.
+
+### Key Validation
+
+No natural trip ID exists in this schema. `VendorID` is not a valid key (highly repeated). Duplicate check used full-row equality instead: **0 exact duplicate rows** in any file.
+
+### Date Coverage
+
+Each file is dominated by its expected month, but all 3 contain a small number of stray out-of-month timestamps (9–10 rows per file, <0.03%), including a few implausible years (2008–2009). This is a known TLC meter-clock quirk, not an ingestion error — needs a documented filter/flag rule before Silver.
+
+### Null Analysis
+
+`ehail_fee` is **100% null** in all 3 files — appears to be a dead/legacy column. `store_and_fwd_flag`, `RatecodeID`, `passenger_count`, `payment_type`, `trip_type`, `congestion_surcharge` are null together on the same ~13–15% of rows per file (consistent pattern, likely one shared source condition — not yet root-caused).
+
+### Validity / Range Findings
+
+- Negative `fare_amount`/`total_amount`: 111–155 rows per file
+- Zero-distance trips with `fare_amount > $20`: 368–548 rows per file (largest-volume anomaly found)
+- `passenger_count` out of range (0 or >8): 2–7 rows per file
+- Dropoff before pickup: 1 row total (March only)
+
+### Categorical Code Validity
+
+Validated against the official TLC LPEP data dictionary. All three codes are
+fully valid: `VendorID` includes `6` (Myle Technologies Inc.), `payment_type`
+includes `0` (Flex Fare), and `RatecodeID` includes `99` (Null/unknown) —
+none of these were in the team's initial assumed valid sets, which caused a
+false "unmapped" flag (`VendorID = 6`, ~9-12% of rows) in the first profiling
+pass. 0 invalid rows found across all three codes in all 3 files after
+correcting the valid sets.
+
+### Profiling Findings
+
+- Schema is stable across all 3 months, no drift.
+- Ingestion is complete and lossless (row-count reconciliation matches exactly).
+- No exact duplicates.
+- Known, low-volume out-of-month timestamp noise (TLC-wide known issue).
+- `ehail_fee` is a dead column.
+- Negative fares/totals and zero-distance/high-fare trips are the most material data quality issues, both low-single-digit % of rows but non-trivial in count.
+- All categorical codes (`payment_type`, `RatecodeID`, `VendorID`) are fully valid against the official TLC data dictionary; 0 invalid rows.
+
+### Profiling Conclusion
+
+Green taxi data is structurally sound (stable schema, zero data loss, no duplicates) and suitable as a source. Remaining caveats that do not block this profiling task but should be resolved before Silver: the negative fare/total rows, zero-distance/high-fare trips, and stray out-of-month rows should be filtered or flagged, not silently dropped.
+
+### Recommended Downstream Rules
+
+1. Define handling for out-of-month timestamp rows (filter vs. flag) before Silver.
+2. Confirm `ehail_fee` is safe to drop or exclude downstream.
+3. Define a rule for negative fare/total rows (e.g. refunds/adjustments vs. bad data — needs domain confirmation, not an assumption).
+4. Investigate zero-distance/high-fare trips before deciding filter vs. flag.
+5. Root-cause the ~13–15% co-occurring nulls across `RatecodeID`/`payment_type`/`trip_type`/etc.
 
 ## Taxi Zones Source Profile
 
