@@ -14,9 +14,9 @@ Compare the March, April, and May schemas before accepting a source contract. Do
 
 | Source | Rows | Schema | Observed Dates | Key Nulls | Duplicate Candidates | Other Anomalies | Evidence |
 |---|---:|---|---|---|---|---|---|
-| Taxi March 2026 | 44,208 | 21 cols, identical across files | 2026-03 dominant; 9 stray rows (1× 2009-01, 8× 2026-02) | `ehail_fee` 100%; 6 other cols ~15% (same rows) | 0 exact duplicates | 111 negative fares, 368 zero-distance/high-fare, 1 dropoff-before-pickup, VendorID=6 unmapped (5,207 rows) | `notebooks/profile_green_taxi_tripdata.ipynb` |
-| Taxi April 2026 | 44,238 | 21 cols, identical across files | 2026-04 dominant; 3 stray rows (1× 2026-03, 2× 2026-05) | `ehail_fee` 100%; 6 other cols ~14% (same rows) | 0 exact duplicates | 153 negative fares, 439 zero-distance/high-fare, 0 dropoff-before-pickup, VendorID=6 unmapped (4,926 rows) | `notebooks/profile_green_taxi_tripdata.ipynb` |
-| Taxi May 2026 | 44,921 | 21 cols, identical across files | 2026-05 dominant; 10 stray rows (2× 2008-12, 8× 2026-04) | `ehail_fee` 100%; 6 other cols ~13% (same rows) | 0 exact duplicates | 120 negative fares, 548 zero-distance/high-fare, 0 dropoff-before-pickup, VendorID=6 unmapped (4,048 rows) | `notebooks/profile_green_taxi_tripdata.ipynb` |
+| Taxi March 2026 | 44,208 | 21 cols, identical across files | 2026-03 dominant; 9 stray rows (1× 2009-01, 8× 2026-02) | `ehail_fee` 100%; 6 other cols ~15% (same rows) | 0 exact duplicates | 111 negative fares, 368 zero-distance/high-fare, 1 dropoff-before-pickup | `notebooks/profile_green_taxi_tripdata.ipynb` |
+| Taxi April 2026 | 44,238 | 21 cols, identical across files | 2026-04 dominant; 3 stray rows (1× 2026-03, 2× 2026-05) | `ehail_fee` 100%; 6 other cols ~14% (same rows) | 0 exact duplicates | 153 negative fares, 439 zero-distance/high-fare | `notebooks/profile_green_taxi_tripdata.ipynb` |
+| Taxi May 2026 | 44,921 | 21 cols, identical across files | 2026-05 dominant; 10 stray rows (2× 2008-12, 8× 2026-04) | `ehail_fee` 100%; 6 other cols ~13% (same rows) | 0 exact duplicates | 120 negative fares, 548 zero-distance/high-fare | `notebooks/profile_green_taxi_tripdata.ipynb` |
 | Taxi zones | 265 | `LocationID`, `Borough`, `Zone`, `service_zone` | Snapshot | 0 nulls across all columns | No duplicate `LocationID` values found | Sentinel records found at `LocationID` 264 and 265; special Borough values include `EWR`, `N/A`, and `Unknown` | `notebooks/profile_taxi_zones` |
 | Weather (Open-Meteo) | 2,208 | `time`, `temperature_2m`, `precipitation`, `weather_code` | 2026-03-01T00:00 to 2026-05-31T23:00 (UTC), no gaps | 0 nulls across all columns | No duplicate `time` values found | 12 distinct `weather_code` values; 0 rows with negative precipitation or out-of-range temperature; requested coordinates snapped to a grid point ~3-4 km away (40.738136, -74.04254, elevation 32.0m) | `notebooks/profile_open_meteo.ipynb` |
 
@@ -63,7 +63,13 @@ Each file is dominated by its expected month, but all 3 contain a small number o
 
 ### Categorical Code Validity
 
-`payment_type` and `RatecodeID`: fully valid against documented code sets, 0 invalid rows. `VendorID = 6` appears in ~9–12% of rows per file and is **not** in the assumed valid set `{1, 2}` — needs confirmation against the current TLC data dictionary (may be a legitimately added vendor code rather than bad data).
+Validated against the official TLC LPEP data dictionary. All three codes are
+fully valid: `VendorID` includes `6` (Myle Technologies Inc.), `payment_type`
+includes `0` (Flex Fare), and `RatecodeID` includes `99` (Null/unknown) —
+none of these were in the team's initial assumed valid sets, which caused a
+false "unmapped" flag (`VendorID = 6`, ~9-12% of rows) in the first profiling
+pass. 0 invalid rows found across all three codes in all 3 files after
+correcting the valid sets.
 
 ### Profiling Findings
 
@@ -73,11 +79,11 @@ Each file is dominated by its expected month, but all 3 contain a small number o
 - Known, low-volume out-of-month timestamp noise (TLC-wide known issue).
 - `ehail_fee` is a dead column.
 - Negative fares/totals and zero-distance/high-fare trips are the most material data quality issues, both low-single-digit % of rows but non-trivial in count.
-- `VendorID = 6` is unmapped in current valid-set assumptions — likely a stale reference list, not a data defect.
+- All categorical codes (`payment_type`, `RatecodeID`, `VendorID`) are fully valid against the official TLC data dictionary; 0 invalid rows.
 
 ### Profiling Conclusion
 
-Green taxi data is structurally sound (stable schema, zero data loss, no duplicates) and suitable as a source. It carries real but low-volume validity issues (negative fares, zero-distance/high-fare trips, stray out-of-month rows) that should be filtered or flagged — not silently dropped — at Silver, plus one reference-data gap (`VendorID = 6`) to resolve before that layer is built.
+Green taxi data is structurally sound (stable schema, zero data loss, no duplicates) and suitable as a source. Remaining caveats that do not block this profiling task but should be resolved before Silver: the negative fare/total rows, zero-distance/high-fare trips, and stray out-of-month rows should be filtered or flagged, not silently dropped.
 
 ### Recommended Downstream Rules
 
@@ -85,8 +91,7 @@ Green taxi data is structurally sound (stable schema, zero data loss, no duplica
 2. Confirm `ehail_fee` is safe to drop or exclude downstream.
 3. Define a rule for negative fare/total rows (e.g. refunds/adjustments vs. bad data — needs domain confirmation, not an assumption).
 4. Investigate zero-distance/high-fare trips before deciding filter vs. flag.
-5. Update the `VendorID` valid-set reference to include `6`, pending confirmation against the current TLC data dictionary.
-6. Root-cause the ~13–15% co-occurring nulls across `RatecodeID`/`payment_type`/`trip_type`/etc.
+5. Root-cause the ~13–15% co-occurring nulls across `RatecodeID`/`payment_type`/`trip_type`/etc.
 
 ## Taxi Zones Source Profile
 

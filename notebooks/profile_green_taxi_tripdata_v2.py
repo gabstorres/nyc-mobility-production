@@ -167,9 +167,10 @@ for f, df in dfs.items():
 # COMMAND ----------
 
 # Known valid value sets per NYC TLC data dictionary — adjust if your version differs
-VALID_PAYMENT_TYPE = {1, 2, 3, 4, 5, 6}
-VALID_RATECODE = {1, 2, 3, 4, 5, 6}
-VALID_VENDOR = {1, 2}
+# Corrected against official TLC data dictionary (March 2025)
+VALID_PAYMENT_TYPE = {0, 1, 2, 3, 4, 5, 6}   # was {1,2,3,4,5,6} — missing 0 = Flex Fare
+VALID_RATECODE = {1, 2, 3, 4, 5, 6, 99}       # was {1,2,3,4,5,6} — missing 99 = Null/unknown
+VALID_VENDOR = {1, 2, 6}                       # was {1,2} — missing 6 = Myle Technologies
 
 for f, df in dfs.items():
     print(f"=== {f} ===")
