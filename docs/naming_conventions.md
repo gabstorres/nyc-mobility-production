@@ -43,22 +43,24 @@ schema. The number is the pipeline stage and matches the `sql/` folder for that
 stage, so schemas sort in pipeline order in the catalog browser and nobody has to
 guess which schema a folder writes to.
 
-| Stage | What lands here | Namespace | Repository folder |
+| Stage | Scope | Code lives here | Tables land here |
 |---|---|---|---|
-| 00 | Source: raw source files as received, no tables | `ftw-week-08`.`00-source` | `sql/00_source_profile/` |
-| 01 | Control: pipeline runs, ingestion batches, DQ results | `ftw-week-08`.`01-control` | `sql/01_control/` |
-| 02 | Bronze: source landed as tables with provenance, unchanged | `ftw-week-08`.`02-bronze` | `sql/02_bronze/` |
-| 03 | Silver: typed, standardized, deduplicated, same grain | `ftw-week-08`.`03-silver` | `sql/03_silver/` |
-| 04 | Integration: joins across sources; no tables of its own | none | `sql/04_integration/` |
-| 05 | Gold: approved facts and built dimensions | `ftw-week-08`.`05-gold` | `sql/05_gold/` |
-| 06 | Analytics: one dataset per approved business question | `ftw-week-08`.`06-analytics` | `sql/06_analytics/` |
+| 00 | Source: raw files as received | `sql/00_source_profile/` | no tables |
+| 01 | Control: runs, ingestion batches, DQ results | `sql/01_control/` | `ftw-week-08`.`01-control` |
+| 02 | Bronze: source landed with provenance, unchanged | `sql/02_bronze/` | `ftw-week-08`.`02-bronze` |
+| 03 | Silver: typed, standardized, deduplicated, same grain | `sql/03_silver/` | `ftw-week-08`.`03-silver` |
+| 04 | Integration: trips resolved to zones and weather | `sql/04_integration/` | `ftw-week-08`.`05-gold` |
+| 05 | Gold: approved facts and built dimensions | `sql/05_gold/` | `ftw-week-08`.`05-gold` |
+| 06 | Analytics: one dataset per business question | `sql/06_analytics/` | `ftw-week-08`.`06-analytics` |
 
 What each stage is responsible for is defined in
 [architecture.md](architecture.md). This document only fixes the names.
 
-Integration has no schema of its own. It is a transformation step between Silver
-and Gold, and its outputs land in Gold. Stage 04 is therefore skipped at the
-schema level rather than renumbering Gold and Analytics.
+A stage number identifies a step, not a schema. Stage 00 creates no tables, and
+stage 04 writes into Gold: resolving a trip to its zones and weather hour adds
+columns without changing the grain of a trip, so it is not a separate layer. The
+`04-` slot is left empty rather than renumbering Gold and Analytics, so that an
+`04-integration` schema can be added later without renaming anything.
 
 The source Volume remains in the existing `00-source` schema. No project tables
 are created in `00-source`.

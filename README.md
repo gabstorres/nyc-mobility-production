@@ -20,6 +20,44 @@ There is no pipeline run command yet. Add the exact Databricks runtime, dependen
 GitHub Issues define the scope, prerequisites, ownership, and acceptance evidence for each work item.
 The GitHub Project board is the canonical view of project status.
 
+## Repository structure
+
+```text
+nyc-mobility-pipeline/
+├── README.md                      What this is, how to start, what is not built yet
+├── CONTRIBUTING.md                Branching, review, namespaces, approved table names
+├── config/
+│   ├── project.example.json       Non-secret catalog, schema and path values to copy
+│   ├── naming.example.yml         Approved naming values in YAML form
+│   └── sources.json               Official source registry
+├── src/
+│   └── ingestion/                 Python discovery, downloads, API requests, orchestration
+├── sql/
+│   ├── 00_source_profile/         Profiling queries; creates no tables
+│   ├── 01_control/                Run history, ingestion batches, DQ results -> 01-control
+│   ├── 02_bronze/                 Landing SQL and Bronze validation -> 02-bronze
+│   ├── 03_silver/                 Cleaning, dedup and Silver validation -> 03-silver
+│   ├── 04_integration/            Zone and weather joins, join coverage; output -> 05-gold
+│   ├── 05_gold/                   Dimensions and facts -> 05-gold
+│   └── 06_analytics/              One dataset per business question -> 06-analytics
+├── notebooks/                     Thin Databricks entry points, no business logic
+├── docs/
+│   ├── architecture.md            How data moves, stage by stage
+│   ├── naming_conventions.md      Approved catalog, schema, table and column names
+│   ├── data_model.md              Business questions, grain, keys, facts, dimensions
+│   ├── data_dictionary.md         Field meaning and source-to-target mapping
+│   ├── ingestion.md               Sources, incremental signals, provenance, rerun behavior
+│   ├── validation.md              Evidence required to prove each layer
+│   └── decisions.md               Decisions, rejected alternatives, consequences
+├── evidence/
+│   └── proof/                     Incremental and idempotency run evidence
+└── .github/                       Pull request and work-item templates
+```
+
+A folder number is a pipeline stage, not a schema. `00_source_profile/` and
+`04_integration/` create no tables of their own; see
+[naming_conventions.md](docs/naming_conventions.md).
+
 ## Responsibilities
 
 | Location | Purpose |
@@ -27,10 +65,10 @@ The GitHub Project board is the canonical view of project status.
 | `config/` | Non-secret configuration examples and official source registry |
 | `src/ingestion/` | Python discovery, downloads, API requests, and ingestion orchestration |
 | `sql/00_source_profile/` | Source profiling queries executed before transformation design is finalized |
-| `sql/01_ops/` | Batch state, run history, checkpoints, schema observations, and DQ results |
+| `sql/01_control/` | Batch state, run history, checkpoints, schema observations, and DQ results, written to `01-control` |
 | `sql/02_bronze/` | Bronze definitions, landing SQL, and Bronze validation |
 | `sql/03_silver/` | Cleaning, standardization, duplicate handling, and Silver validation |
-| `sql/04_integration/` | Taxi, zone, and weather joins plus join-coverage validation |
+| `sql/04_integration/` | Taxi, zone, and weather joins plus join-coverage validation; output is written by the Gold build, not a schema of its own |
 | `sql/05_gold/`, `sql/06_analytics/` | Structural placeholders until the dimensional model is approved |
 | `notebooks/` | Thin Databricks entry points, avoiding duplicated business logic |
 | `docs/` | Canonical architecture, model, dictionary, ingestion, decisions, validation |
