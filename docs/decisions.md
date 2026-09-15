@@ -20,14 +20,26 @@ Whenever a decision changes, update the relevant canonical documents in the same
 
 ## Databricks namespace and naming
 
-Status: Proposed in Issue #3  
+Status: Proposed in Issue #3; revised `Sep 15 2026` after review  
 Decision date: `Sep 14 2026`
 
 The project uses the `ftw-week-08` catalog and the existing R2-backed Volume at `ftw-week-08`.`00-source`.`group_a_source`.
 
-Persisted processing layers use separate `control`, `bronze`, `silver`, `gold`, and `analytics` schemas. Table names do not include `group_a_` because the approved schemas are dedicated to the group.
+Persisted processing layers use separate `01-control`, `02-bronze`, `03-silver`, `05-gold`, and `06-analytics` schemas. Each schema is prefixed with its pipeline-stage number, matching the existing `00-source` schema and the numbered `sql/` folders, so schemas sort in pipeline order and the stage number means the same thing in the catalog and in the repository. Table names do not include `group_a_` because the approved schemas are dedicated to the group.
 
-A separate `control` schema was selected because pipeline runs, ingestion batches, and data-quality results have different grains and lifecycles from business records.
+A stage number identifies a step of the pipeline, not a schema. Every step has a `sql/` folder; only steps that create tables have a schema. Stage 00 profiles source files and creates none, and stage 04 (integration) writes into Gold because resolving a trip to its zones and weather hour does not change the grain of a trip. The `04-` slot is left empty rather than renumbering Gold and Analytics, so an `04-integration` schema can be added later without renaming existing schemas.
+
+Stage 04 would earn its own schema if integration began producing a different grain (for example a trip-to-advisory bridge table), if several Gold facts reused the same expensive join and recomputation became a measured bottleneck, or if integration output needed a separate write owner. None of these hold at the time of this decision.
+
+Alternative rejected: unnumbered schema names (`bronze`, `silver`, `gold`). They read more cleanly in SQL but sort alphabetically in the catalog browser, which puts Analytics before Bronze and Gold before Silver, and they leave the existing `00-source` schema as the only numbered name.
+
+Alternative rejected: numbering tables as well (`02_green_taxi_raw`). The schema already carries the layer, a numeric table prefix would repeat it, and identifiers beginning with a digit would force backticks on every table reference.
+
+Consequence: every schema name contains a hyphen and begins with a digit, so backticks are mandatory on all catalog and schema references. This was already true of the catalog name. Table and column names must not begin with a digit.
+
+Consequence: this rename is only free while no processing schema or table exists. Confirm in the workspace before any schema is created; after tables exist a rename means recreate and reload.
+
+A separate `01-control` schema was selected because pipeline runs, ingestion batches, and data-quality results have different grains and lifecycles from business records.
 
 Gold and Analytics names remain pending Issue #17 and the approved business-question outputs.
 
