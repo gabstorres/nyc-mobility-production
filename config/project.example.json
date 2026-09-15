@@ -1,18 +1,19 @@
 {
-  "status": "example_only_not_runnable",
+  "status": "approved_non_secret_configuration",
   "platform": "databricks",
   "storage": "class_r2",
-  "catalog": null,
+  "catalog": "ftw-week-08",
   "schemas": {
-    "control": null,
-    "bronze": null,
-    "silver": null,
-    "gold": null,
-    "analytics": null
+    "source": "00-source",
+    "control": "control",
+    "bronze": "bronze",
+    "silver": "silver",
+    "gold": "gold",
+    "analytics": "analytics"
   },
-  "group_name": null,
+  "group_name": "group_a",
   "r2_group_prefix": null,
-  "landing_volume_path": null,
+  "landing_volume_path": "/Volumes/ftw-week-08/00-source/group_a_source",
   "reporting_timezone": "America/New_York",
   "initial_proof_month": "2026-03",
   "proof_months": [
@@ -24,7 +25,7 @@
     "latitude": 40.7128,
     "longitude": -74.006,
     "coordinate_status": "proposed_city_representative",
-    "timezone": "UTC",
+    "timezone": null,
     "model": null,
     "hourly": [
       "temperature_2m",

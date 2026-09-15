@@ -16,3 +16,21 @@ Record problem, decision, reason, rejected alternative, assumption, consequence,
 | D08 | One branch/work item and reviewer | Reliability and maintainability of shared changes | Separate developer outputs from integration targets | Proposed |
 
 Whenever a decision changes, update the relevant canonical documents in the same PR and explicitly identify any remaining stale documents. This log explains choices; detailed implementation contracts live in ingestion/model/architecture documents.
+
+
+## Databricks namespace and naming
+
+Status: Proposed in Issue #3  
+Decision date: `Sep 14 2026`
+
+The project uses the `ftw-week-08` catalog and the existing R2-backed Volume at `ftw-week-08`.`00-source`.`group_a_source`.
+
+Persisted processing layers use separate `control`, `bronze`, `silver`, `gold`, and `analytics` schemas. Table names do not include `group_a_` because the approved schemas are dedicated to the group.
+
+A separate `control` schema was selected because pipeline runs, ingestion batches, and data-quality results have different grains and lifecycles from business records.
+
+Gold and Analytics names remain pending Issue #17 and the approved business-question outputs.
+
+Alternative rejected: storing operational state in Bronze. This would mix pipeline-control records with source-preserving business data.
+
+Assumption: the processing schemas are dedicated to Group A. If other groups share them, the namespace strategy must be revised before tables are created.
