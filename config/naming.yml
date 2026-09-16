@@ -34,8 +34,13 @@ tables:
     weather_hourly: "weather_hourly"
     taxi_zones: "taxi_zones"
 
-  # Populate only after Issue #17 approves the star schema.
-  gold: {}
+  gold:
+    dim_date: "dim_date"
+    dim_hour: "dim_hour"
+    dim_taxi_zone: "dim_taxi_zone"
+    dim_weather_classification: "dim_weather_classification"
+    fact_weather_hourly: "fact_weather_hourly"
+    fact_taxi_trip: "fact_taxi_trip"
 
   # Populate after the Analytics datasets are approved.
   analytics: {}
