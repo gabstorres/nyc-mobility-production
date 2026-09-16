@@ -1,7 +1,5 @@
 # Source-to-target mapping
 
-Status: **Proposed implementation contract, assuming the Option B model in Issue #17 is approved.**
-
 This document tracks every source, configuration, metadata, and derived field from acquisition through Bronze, Silver, and Gold. A field must not be silently renamed, cast, dropped, or given a new meaning.
 
 ## Layer targets
@@ -172,6 +170,8 @@ Sentinel locations 264 and 265 remain separate valid dimension rows.
 | Average fare | Metered fare is non-null and at least zero; negative adjustments remain retained and flagged |
 | Fare per mile, if used | Fare is at least zero and distance is greater than zero |
 
+Q1 presents pickup-zone and drop-off-zone results separately using pickup date, day of week, and hour as the stated time context. Q2 groups all four measures by the weather classification matched at pickup hour. Q3 produces separate pickup- role and drop-off-role views; weather in both views remains the pickup-hour classification. Q4 remains deferred and creates no Gold-model dependency.
+
 ## Weather-to-trip integration contract
 
 1. Convert `pickup_datetime_local` to UTC using the DST-aware `America/New_York` timezone.
@@ -186,10 +186,17 @@ Sentinel locations 264 and 265 remain separate valid dimension rows.
 
 The owner of any layer-changing PR must update this mapping in the same PR when a field is added, renamed, cast, derived, dropped, reinterpreted, or routed to a different target. Schema drift must create a visible review item; unknown fields must not disappear silently.
 
-## Remaining implementation gates
+## Resolved design gates
 
-- Issue #14 must finalize the deterministic `trip_key` and duplicate-survivorship policy.
-- Pin an explicit Open-Meteo model before new production ingestion.
-- Confirm the taxi source timezone semantics with the required DST evidence.
-- Validate the proposed numeric casts against the persisted Parquet and JSON schemas before creating Silver tables.
-- If the team changes precipitation or time-of-day bands, update this file, the model documentation, and the decision record together.
+- Issue #14 approved the deterministic trip-identity inputs and the rule that every row in a duplicate collision group is routed to quarantine rather than Gold.
+- Issue #16 approved UTC weather acquisition, DST-aware conversion to `America/New_York` in Silver, and pickup-hour weather matching in UTC.
+- Issue #17 approved the two-fact Gold model, all fact and dimension names, their grains, keys, nullable relationships, and unknown-member handling.
+
+## Remaining implementation validations
+
+- Pin an explicit Open-Meteo model before new production ingestion. Existing unpinned evidence remains labelled `api_default_unpinned`.
+- Validate every proposed numeric cast against the persisted Parquet and JSON schemas before creating Silver and Gold tables.
+- Implement and test every WMO, precipitation-band, Taxi Zone, measure-eligibility, and match-status rule exactly as documented.
+- Reconcile row counts, unmatched keys, join cardinality, and same-input rerun behavior before publishing each Gold table.
+- If a classification band or implementation field changes, update this file, `docs/data_model.md`, `docs/data_dictionary.md`, `docs/decisions.md`, the DBML source, and the exported diagram together.
+```

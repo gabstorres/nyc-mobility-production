@@ -1,141 +1,375 @@
-This document records important engineering decisions, their reasons, rejected alternatives, assumptions, and consequences.
-
 # Decision log
 
-Record problem, decision, reason, rejected alternative, assumption, consequence, status and reviewer. Priority: correctness > reliability > maintainability > scalability > observability > efficiency.
+This document is the canonical record of important product, data, and engineering decisions for the NYC Mobility Pipeline. It records what was decided, why it was chosen, which alternatives were rejected, what assumptions remain, and what consequences follow.
 
-| ID | Decision | Reason / rejected alternative | Assumption / consequence | Status |
-|---|---|---|---|---|
-| D01 | Databricks + class R2; GitHub for code/docs | User selected course platform; avoid introducing a second platform | Actual access and paths must be confirmed | Platform confirmed; setup pending |
-| D02 | Taxi, weather, zones first | Correctness before bonus scope; current advisories do not establish March-May closures | Traffic deferred until historical/spatial coverage exists | Proposed |
-| D03 | Source-version manifest with per-layer checkpoints | Reliability before a simple filename-only skip list | Need safe commit/checkpoint reconciliation | Proposed |
-| D04 | Replace a revised source batch contribution when complete | Correctness before efficiency; invented trip merge keys can retain stale rows | Must confirm replacement snapshot semantics | Proposed |
-| D05 | Profile before finalizing taxi deduplication | Correctness before convenient DISTINCT/hash deduplication | Unique real-world trip identity may not be provable | Required design gate |
-| D06 | One representative NYC weather location initially | Maintainability once business scope accepts city-level approximation | Cannot claim zone-specific observed weather | Proposed |
-| D07 | No SCD Type 2 for zones initially | Maintainability; no agreed question requires historical zone labels | Pin raw snapshot for reproducibility | Proposed |
-| D08 | One branch/work item and reviewer | Reliability and maintainability of shared changes | Separate developer outputs from integration targets | Proposed |
-| D09 | Request and store weather in UTC at Bronze; convert to America/New_York in Silver | Correctness/reliability: keeps Bronze source-faithful and unmodified per `docs/architecture.md`, and avoids depending on Open-Meteo's own timezone-localization behavior, which was not verified to be DST-aware per hour across the profiled window | Silver-layer conversion must use a DST-aware IANA timezone conversion (`America/New_York`), never a fixed `-4`/`-5` hour offset, given the confirmed March 8, 2026 spring-forward transition inside the March-May 2026 window; taxi's timezone still needs empirical confirmation for Issue #16 before the join logic is finalized | Proposed |
-| D10 | Composite business key hash as the "fingerprint" / duplicate identifier & quarantine policy for Green Taxi duplicates | Correctness before completeness; rejected automated survivorship (total_amount > 0) and used a blanket rule to quarantine all affected duplicate rows instead | Will quarantine all colliding rows (14 rows, 0.010% rate) to a separate table; will halt clean load if >1% | Proposed |
-| D11 | Use a full-refresh strategy for the Taxi Zones reference dataset | The Taxi Zones source is a small static reference snapshot (265 rows) delivered as a complete lookup file rather than a transactional or append-only dataset. Full refresh provides deterministic rerun behavior and avoids unnecessary incremental logic, checksum-based snapshot management, and merge complexity. Rejected alternative: incremental row-level processing for a static lookup table. Rejected alternative: `COPY INTO`-based incremental ingestion, which is more appropriate for continuously arriving files such as the monthly Green Taxi extracts. | Rerunning the same source file produces the same row count and business content. Operational metadata such as `ingested_at` is expected to change between runs. When a newer approved Taxi Zones snapshot becomes available, the table is rebuilt from the complete source snapshot. | Proposed for Issue #22 |
+**Last updated:** 2026-09-17  
+**Decision priority:** correctness > reliability > maintainability > scalability > observability > efficiency
 
-Whenever a decision changes, update the relevant canonical documents in the same PR and explicitly identify any remaining stale documents. This log explains choices; detailed implementation contracts live in ingestion/model/architecture documents.
+## Maintenance rule
 
+When a decision changes, update this file and every affected canonical document in the same pull request. Explicitly identify any document that remains stale.
 
-## Databricks namespace and naming
+This log explains why choices were made. Detailed implementation contracts live in:
 
-Status: Proposed in Issue #3; revised `Sep 15 2026` after review  
-Decision date: `Sep 14 2026`
+- `docs/architecture.md`
+- `docs/ingestion.md`
+- `docs/data_model.md`
+- `docs/data_dictionary.md`
+- `docs/source_to_target_mapping.md`
+- `docs/naming_conventions.md`
+- `docs/model/nyc_mobility_star_schema.dbml`
 
-The project uses the `ftw-week-08` catalog and the existing R2-backed Volume at `ftw-week-08`.`00-source`.`group_a_source`.
+## Decision register
 
-Persisted processing layers use separate `01-control`, `02-bronze`, `03-silver`, `05-gold`, and `06-analytics` schemas. Each schema is prefixed with its pipeline-stage number, matching the existing `00-source` schema and the numbered `sql/` folders, so schemas sort in pipeline order and the stage number means the same thing in the catalog and in the repository. Table names do not include `group_a_` because the approved schemas are dedicated to the group.
+| ID | Decision | Status | Primary consequence |
+|---|---|---|---|
+| D01 | Use Databricks and the class R2 storage environment; use GitHub for code and documentation | Platform confirmed; setup tracked separately | Do not introduce another processing or storage platform without a new decision |
+| D02 | Prioritize Taxi, Weather, and Taxi Zones; defer traffic advisories | Active | Optional traffic analysis creates no model dependency until historical and spatial coverage is validated |
+| D03 | Use a source-version manifest with per-layer checkpoints | Proposed | File discovery alone is not sufficient proof that a source version completed every layer |
+| D04 | Replace a complete revised source-batch contribution | Proposed | Do not append a revised contribution beside stale rows from the same logical source version |
+| D05 | Profile before finalizing taxi duplicate handling | Resolved by D10 and Issue #14 | Do not use `DISTINCT` or an invented trip identifier without collision evidence |
+| D06 | Use one representative NYC weather coordinate initially | Active | Weather results are citywide associations and not zone-specific observations |
+| D07 | Do not use SCD Type 2 for Taxi Zones initially | Final candidate under Issue #17 | Pin the selected reference snapshot; add historical versions only for a future approved requirement |
+| D08 | Use one branch per work item and assign a reviewer | Proposed team workflow | Keep individual work isolated from shared integration targets |
+| D09 | Store weather in UTC in Bronze and convert to `America/New_York` in Silver | Approved through Issue #16 | All conversions must be DST-aware; never use a fixed UTC offset |
+| D10 | Identify taxi duplicate collisions with the approved composite hash and quarantine every colliding row | Approved through Issue #14 | Collision groups do not enter the clean Silver or Gold trip tables |
+| D11 | Full-refresh the selected Taxi Zone reference snapshot | Approved through Issue #22 | Identical input produces identical business content without incremental row-level complexity |
+| D12 | Approve three core business questions, defer optional traffic analysis, and use the two-fact Gold model | Final candidate for Issue #17 | Pickup and drop-off roles remain separate; trip and hourly-weather measurements remain at their natural grains |
+| D13 | Use numbered Databricks schemas aligned with pipeline stages | Approved through Issue #3 | Persisted objects use `01-control`, `02-bronze`, `03-silver`, `05-gold`, and `06-analytics` |
 
-A stage number identifies a step of the pipeline, not a schema. Every step has a `sql/` folder; only steps that create tables have a schema. Stage 00 profiles source files and creates none, and stage 04 (integration) writes into Gold because resolving a trip to its zones and weather hour does not change the grain of a trip. The `04-` slot is left empty rather than renumbering Gold and Analytics, so an `04-integration` schema can be added later without renaming existing schemas.
+## Foundational decisions
 
-Stage 04 would earn its own schema if integration began producing a different grain (for example a trip-to-advisory bridge table), if several Gold facts reused the same expensive join and recomputation became a measured bottleneck, or if integration output needed a separate write owner. None of these hold at the time of this decision.
+### D01: Platform and repository
 
-Alternative rejected: unnumbered schema names (`bronze`, `silver`, `gold`). They read more cleanly in SQL but sort alphabetically in the catalog browser, which puts Analytics before Bronze and Gold before Silver, and they leave the existing `00-source` schema as the only numbered name.
+Use Databricks with the class R2 storage environment for processing and storage. Use GitHub for version-controlled code and documentation.
 
-Alternative rejected: numbering tables as well (`02_green_taxi_raw`). The schema already carries the layer, a numeric table prefix would repeat it, and identifiers beginning with a digit would force backticks on every table reference.
+**Reason:** These are the selected course and team platforms. Introducing another platform would increase setup, access, and support risk without serving an approved requirement.
 
-Consequence: every schema name contains a hyphen and begins with a digit, so backticks are mandatory on all catalog and schema references. This was already true of the catalog name. Table and column names must not begin with a digit.
+**Consequence:** Actual access, catalog paths, Volume paths, and permissions must be verified in the workspace rather than assumed from documentation.
 
-Consequence: this rename is only free while no processing schema or table exists. Confirm in the workspace before any schema is created; after tables exist a rename means recreate and reload.
+### D02: Source scope and deferred traffic analysis
 
-A separate `01-control` schema was selected because pipeline runs, ingestion batches, and data-quality results have different grains and lifecycles from business records.
+Implement the pipeline first with:
 
-Gold and Analytics names remain pending Issue #17 and the approved business-question outputs.
+- NYC TLC Green Taxi trip records
+- Open-Meteo archive weather
+- NYC Taxi Zones
 
-Alternative rejected: storing operational state in Bronze. This would mix pipeline-control records with source-preserving business data.
+NYC DOT traffic advisories remain optional and deferred.
 
-Assumption: the processing schemas are dedicated to Group A. If other groups share them, the namespace strategy must be revised before tables are created.
+**Reason:** The currently available advisory evidence does not establish reliable historical and spatial coverage for March–May 2026. Correctness takes priority over bonus scope.
 
-## Weather and taxi timezone standard
+**Consequence:** Q4 does not justify a traffic fact, disruption dimension, bridge table, or trip-to-advisory relationship. Traffic modeling requires a later source-validation result and a separate approved design decision.
 
-Status: Proposed for Issue #16  
-Decision date: `Sep 15 2026`
+### D03: Source-version manifest and checkpoints
 
-Weather data is requested and stored in UTC at Bronze, matching Open-Meteo's default request behavior and the already-profiled evidence in `docs/source_profile.md` (`utc_offset_seconds: 0`, `timezone`/`timezone_abbreviation`: `GMT`/`GMT`). Conversion to `America/New_York` happens explicitly and only in Silver, using a real DST-aware timezone conversion, before joining weather hours to taxi trips by pickup hour.
+Track immutable source versions and their progress through each pipeline layer in a control manifest.
 
-Alternative rejected: requesting Open-Meteo data pre-localized to `America/New_York` via the API's own `timezone` request parameter. This was tested directly and does return a response with `utc_offset_seconds: -14400` / `timezone_abbreviation: GMT-4`, so the parameter is real and accepted. It was rejected anyway for two reasons: whether the API applies true per-hour DST-aware conversion across a multi-month window (rather than one flat current offset) was not confirmed before this decision was made, and pushing a standardization/reporting concern into the Bronze ingestion request conflicts with Bronze's role of preserving the source's own representation as received, per `docs/architecture.md`.
+**Reason:** A filename-only skip list cannot safely distinguish discovery, partial processing, failed writes, completed commits, or an explicit replay.
 
-Assumption: taxi (`lpep_pickup_datetime`/`lpep_dropoff_datetime`) timestamps are already recorded in `America/New_York` local time. This still requires empirical confirmation via the DST-transition check tracked under Issue #16 before the join logic below is treated as final. If taxi timestamps turn out to be UTC instead, both weather and taxi receive the same Silver-layer conversion, not just weather.
+**Consequence:** The design must support safe reconciliation between checkpoints and committed tables. A source version is considered complete only when its required layer checkpoint is successful.
 
-Consequence: any Silver transformation touching `weather_hourly.time` must convert it using a real IANA timezone library, correctly handling the March 8, 2026 spring-forward boundary inside the profiled window — a naive fixed-offset conversion would misjoin every weather-to-trip pairing on one side of that boundary by exactly one hour. A worked 2am example spanning that boundary must be included in the same PR that implements this conversion, per Issue #16's acceptance evidence.
+### D04: Revised source-batch replacement
 
+When a complete source contribution is revised, replace the prior contribution for that logical source batch rather than appending the revision beside stale rows.
 
-## Green Taxi Trip Dataset Duplicate Identification and Treatment Policy
-Status: Proposed for Issue #14
+**Reason:** Appending revisions can retain obsolete records. Inventing row-level merge keys where real-world identity is not provable can also preserve the wrong row.
 
-Decision date: `Sep 15 2026`
+**Consequence:** Replacement must be scoped through the source-version manifest, reconciled by row counts and content checks, and committed atomically where practical.
 
-To identify and handle duplicates in the Green Taxi trip dataset in the absence of a natural trip ID in the source, a composite business key will be constructed using `VendorID`, `lpep_pickup_datetime`, `lpep_dropoff_datetime`, `PULocationID`, `DOLocationID`, `trip_distance`, and `fare_amount`.
+### D05: Profile before duplicate handling
 
-Fields with high null rates (~13–15%, such as `passenger_count`, `payment_type`, `RatecodeID`, `trip_type`, and `congestion_surcharge`) will be intentionally excluded to prevent unstable hash matching.
+Taxi duplicate handling must be based on observed collision evidence rather than convenience operations such as blanket `DISTINCT`.
 
- A SHA-256 digest (trip_hash) will be generated from this composite key to detect collisions across the full cumulative Bronze table (March–May 2026, spanning 133,367 total rows).
+**Status:** Resolved by D10 and Issue #14.
 
- Alternative rejected: Automatic survivorship rules (e.g., selecting total_amount > 0). Although manual inspection of all 7 collision groups (14 total rows) across March, April, and May showed consistent reversal/correction pairs (identical trip identity with sign-flipped charge fields netting to zero), we cannon rule out the possibility of future duplicate scenarios that the total_amount > 0 may not be able to catch, hence using a blanket rule to quarantine ALL affected duplicate rows instead. Consequently, automated survivorship was dropped in favor of strict correctness.
+### D06: Representative citywide weather coordinate
 
-Consequence and Policy:
-- Quarantine Strategy: Every row involved in a collision will be excluded from the future clean Silver table and routed to a separate quarantine table (`green_taxi_trip_quarantine_silver` (not yet the final table name)) tagged with FIX, ensuring the clean table (`green_taxi_tripdata_silver` (not yet the final table name)) will be trustworthy by construction without requiring downstream filters.
-- Threshold Gate: A quarantine threshold of 1% will be enforced. The observed baseline across March–May is 0.010% (14 quarantined rows vs. 133,353 clean rows); if a batch exceeds this threshold, the pipeline will halt loading the clean silver table, but will still load the silver quarantine table to allow investigation.
-- Idempotency: The process will rely on full Bronze re-reads and overwrite mode to guarantee that identical inputs consistently yield identical clean and quarantine table outputs on every rerun. 
+Use one documented representative NYC coordinate for the initial Open-Meteo series.
 
-## Taxi Zones full-refresh ingestion
+**Reason:** This supports the approved weather-association questions without claiming a spatial resolution the source request does not provide.
 
-Status: Proposed for Issue #22
+**Consequence:** Weather results must be described as citywide associations. A Taxi Zone comparison does not mean weather was separately measured in every zone.
 
-Decision date: `Sep 16 2026`
+### D07: No initial SCD Type 2 for Taxi Zones
 
-The Taxi Zones dataset is a small static reference lookup containing 265 rows and delivered as a complete source snapshot.
+Use the selected validated Taxi Zone snapshot as a current reference dimension. Do not implement SCD Type 2 history initially.
 
-The Bronze Taxi Zones table uses a full-refresh strategy implemented with `CREATE OR REPLACE TABLE`.
+**Reason:** None of the approved questions requires historical zone descriptions.
 
-The source snapshot is loaded into:
+**Rejected alternative:** Adding effective dates and multiple historical versions without a business requirement.
 
-`ftw-week-08`.`01-bronze`.`taxi_zones_raw`
+**Consequence:** Pin the source snapshot and retain its checksum and retrieval metadata for reproducibility. Reconsider historical dimension versions only if a future approved question requires them.
 
-### Reason
+### D08: Branch and review workflow
 
-The Taxi Zones source is a complete lookup dataset rather than a stream of independent transactional records.
+Use one branch per work item and identify a reviewer for shared changes.
 
-A full refresh is intentionally chosen because:
+**Reason:** Isolated branches make ownership, review, rollback, and integration clearer for a multi-person project.
 
-1. The complete dataset is available in a single source file.
-2. The dataset is small and inexpensive to reload.
-3. Full refresh produces deterministic rerun behavior.
-4. Replacing the dataset is easier to validate than implementing row-level change tracking.
-5. Incremental processing would add unnecessary complexity without providing meaningful performance benefits.
+**Consequence:** Developers should not use a shared integration branch as their personal working branch.
 
-### Rerun behavior
+## Data and ingestion decisions
 
-Rerunning ingestion against the same Taxi Zones source file produces:
+### D09: Weather and taxi timezone standard
 
-- The same row count.
-- The same business content.
-- No duplicate business records.
+**Status:** Approved through Issue #16  
+**Decision date:** 2026-09-15
 
-Operational metadata such as `ingested_at` will reflect the latest ingestion run and is expected to change between executions.
+Request and store Open-Meteo weather in UTC in Bronze. Convert weather timestamps to `America/New_York` explicitly in Silver using a DST-aware IANA timezone conversion. Join weather to taxi trips using the trip pickup hour after both timestamps have been reconciled correctly.
 
-### Rejected alternative: incremental processing
+The profiled weather response supports the UTC interpretation:
 
-Using `INSERT INTO`, `MERGE`, or similar row-level incremental logic was rejected because Taxi Zones is not an append-only transactional source.
+- `utc_offset_seconds = 0`
+- `timezone = GMT`
+- `timezone_abbreviation = GMT`
 
-An incremental approach would require additional logic to identify inserts, updates, deletes, checksum management, and snapshot version tracking. For a static 265-row reference lookup table, this complexity provides little benefit.
+**Rejected alternative:** Requesting Open-Meteo data pre-localized with the API `timezone` parameter. Although the parameter is accepted, its per-hour DST behavior across the complete multi-month window was not validated before this decision. Pre-localizing the acquisition request would also move a Silver standardization concern into source-preserving Bronze.
 
-### Rejected alternative: COPY INTO
+**Assumption requiring validation:** Source taxi timestamps in `lpep_pickup_datetime` and `lpep_dropoff_datetime` represent `America/New_York` local time. If profiling proves that they are UTC instead, both taxi and weather must receive the appropriate explicit Silver conversion.
 
-`COPY INTO` is appropriate for sources that arrive incrementally as new files, such as the monthly Green Taxi Parquet extracts.
+**Consequence:** Never convert with a fixed `-4` or `-5` hour offset. The March 8, 2026 spring-forward transition falls inside the reporting window. The implementation must include the worked DST-boundary example required by Issue #16.
 
-Taxi Zones is currently a single reference CSV snapshot rather than a continuously arriving dataset. Using `COPY INTO` would not eliminate the need for additional snapshot-management logic and would not provide meaningful advantages over a deterministic full refresh.
+### D10: Green Taxi duplicate-identification and quarantine policy
 
-### Consequences
+**Status:** Approved through Issue #14  
+**Decision date:** 2026-09-15
 
-- The Taxi Zones reference table can be rebuilt deterministically.
-- Rerunning ingestion is safe and repeatable.
-- Duplicate records are not introduced during reruns.
-- Implementation complexity is minimized for a small static lookup dataset.
-- Future ingestion logic can be revisited if the source begins publishing versioned or incremental snapshots.
-``
+Green Taxi has no verified natural trip ID. Construct a deterministic SHA-256 fingerprint from:
 
+- `VendorID`
+- `lpep_pickup_datetime`
+- `lpep_dropoff_datetime`
+- `PULocationID`
+- `DOLocationID`
+- `trip_distance`
+- `fare_amount`
+
+Exclude highly nullable fields such as `passenger_count`, `payment_type`, `RatecodeID`, `trip_type`, and `congestion_surcharge` from the fingerprint because they would make matching unstable.
+
+Profiling across March–May 2026 found:
+
+- 133,367 total rows
+- 7 collision groups
+- 14 colliding rows
+- approximately 0.010% of rows affected
+
+Manual inspection showed reversal or correction-like pairs with identical identity inputs and sign-flipped charge fields.
+
+**Rejected alternative:** Automatically choosing a survivor such as the row where `total_amount > 0`. The observed examples do not prove that the rule would remain correct for future collision types.
+
+**Policy:**
+
+- Route every row in a collision group to the Silver quarantine table.
+- Do not place a selected survivor from that group into the clean Silver table or Gold trip fact.
+- Tag quarantined records for investigation and preserve their complete lineage.
+- Halt publication of the clean Silver contribution if the quarantine rate exceeds 1%, while still writing the quarantine output for investigation.
+- Use deterministic full Bronze rereads and overwrite/replacement behavior so identical input produces identical clean and quarantine business content.
+
+**Consequence:** The Gold `trip_key` can use the approved fingerprint inputs after collision groups have been removed. It must not include `batch_id`, `run_id`, or ingestion time merely to manufacture uniqueness.
+
+### D11: Taxi Zones full-refresh ingestion
+
+**Status:** Approved through Issue #22  
+**Decision date:** 2026-09-16
+
+Taxi Zones is a small complete reference snapshot containing 265 profiled rows. Preserve each received source artifact with checksum and retrieval metadata, then rebuild the selected reference table from the complete validated snapshot.
+
+The Bronze target is:
+
+```text
+`ftw-week-08`.`02-bronze`.taxi_zones_raw
+```
+
+The selected normalized reference is rebuilt deterministically for downstream use.
+
+**Reason:**
+
+- The complete dataset arrives as one lookup snapshot.
+- The dataset is small and inexpensive to reload.
+- Full refresh naturally captures inserts, updates, and removals within the selected snapshot.
+- Replacement is easier to validate than unnecessary row-level change tracking.
+
+**Rejected alternatives:**
+
+- `INSERT INTO` or row-level `MERGE`, which would require extra insert/update/delete detection and snapshot-version logic.
+- `COPY INTO` as the sole incremental mechanism, which is better suited to independently arriving files such as monthly Taxi extracts and does not solve selected-snapshot replacement.
+
+**Rerun behavior:** Identical input produces the same row count and business content with no duplicate business records. Operational metadata such as `ingested_at` may reflect the latest execution.
+
+**Consequence:** If Taxi Zones later becomes a versioned incremental source, revisit this decision before changing the load strategy.
+
+## Business and model decision
+
+### D12: Final business questions and Gold model
+
+**Status:** Approved through Issue #17  
+**Decision date:** 2026-09-17  
+
+#### Final business questions
+
+##### Q1. When and where is recorded Green Taxi activity highest?
+
+**Measure:** Trip count  
+**By:** Pickup date, day of week, hour, and Taxi Zone
+
+Pickup and drop-off zones are analyzed separately.
+
+##### Q2. How is weather associated with taxi activity and trip behavior?
+
+**Measures:**
+
+- Trip count
+- Average trip duration
+- Average trip distance
+- Average fare amount
+
+**By:** Weather condition and precipitation band
+
+##### Q3. Which areas show the strongest mobility patterns?
+
+**Measures:**
+
+- Pickup count
+- Drop-off count
+- Average trip duration
+- Average trip distance
+- Average fare amount
+
+**By:** Taxi Zone, time, and weather condition
+
+Pickup and drop-off roles remain separate.
+
+##### Q4. Optional: Do traffic disruptions affect taxi activity?
+
+This question remains deferred unless reliable historical and spatial coverage can be validated from the NYC DOT advisory source.
+
+#### Qualifications
+
+- Recorded trip count is a proxy for demand.
+- Weather comparisons show association, not causation.
+- Source fields and coverage remain unverified until profiling is complete.
+
+#### Assumptions requiring validation
+
+- Reporting timezone is `America/New_York`.
+- Weather is attributed using the trip pickup hour.
+- Open-Meteo represents one documented citywide NYC coordinate.
+- Q2 and Q3 describe association, not causation.
+- Trip count measures recorded taxi activity and is only a proxy for demand.
+- Fare analysis uses `fare_amount`, excluding tolls, surcharges, and tips.
+- Weather-code and precipitation-band mappings will be documented.
+- Fare, duration, and distance validity rules will be based on profiling.
+- Invalid values will remain traceable through quality flags or quarantine records.
+- March–May 2026 files contain the expected fields and usable date coverage.
+
+#### Model choice
+
+Use a two-fact Gold design:
+
+- `fact_taxi_trip`: one row per accepted Green Taxi trip after the approved duplicate policy.
+- `fact_weather_hourly`: one row per configured coordinate, UTC observation hour, and selected weather model.
+- `dim_date`: one row per NYC-local calendar date.
+- `dim_hour`: one row per hour of day from 0 through 23.
+- `dim_taxi_zone`: one row per Taxi Zone `LocationID` in the selected validated snapshot.
+- `dim_weather_classification`: one row per weather-code and precipitation-band combination.
+
+Trip and weather measurements remain at their natural grains. Many trips can occur during one weather hour. Copying precipitation or temperature to every trip would create a double-counting risk. The separate weather fact also preserves the complete hourly series, including hours with no recorded trips.
+
+A trip receives only the weather-classification key from its unique pickup-hour match. Temperature and precipitation remain exclusively in `fact_weather_hourly`. The facts are not joined through a fact-to-fact foreign key.
+
+**Rejected alternative:** One trip fact with measured hourly weather stored as a dimension attached to trips. Although queryable with care, that structure blurs the weather grain and makes repeated-measure aggregation errors easier.
+
+#### Keys and relationships
+
+- `fact_taxi_trip.trip_key` is the deterministic non-null primary key created from the D10 identity inputs after collision groups are quarantined.
+- `fact_weather_hourly.weather_observation_key` is deterministic from `coordinate_id`, `observation_timestamp_utc`, and `weather_model`.
+- `dim_taxi_zone.zone_key` is the surrogate primary key; `location_id` is the unique source business key.
+- `dim_weather_classification.weather_classification_key` is deterministic from `weather_code` and `precipitation_band`.
+- `dim_date.date_key` uses `YYYYMMDD`.
+- `dim_hour.hour_key` equals the hour value from 0 through 23.
+- Pickup and drop-off use separate role-playing Date, Hour, and Taxi Zone foreign keys.
+- `fact_taxi_trip.pickup_weather_classification_key` references the classification dimension and is not a foreign key to the weather fact.
+- No Gold fact resolves a relationship directly against a Silver lookup table.
+
+#### Nullable relationships and unknown handling
+
+- `pickup_zone_key` and `dropoff_zone_key` are nullable for missing or unmatched source IDs. Preserve the original location ID and a match-status field.
+- Taxi Zone IDs 264 and 265 remain valid members representing `unknown` and `outside_nyc`. Do not convert an unrelated unmatched ID to either member.
+- `pickup_weather_classification_key` is nullable for `no_match` or `invalid_pickup_timestamp`.
+- An ambiguous weather match blocks Gold publication.
+- An unrecognized non-null WMO code maps to an explicit `unknown_code` classification and creates a data-quality review item.
+- Do not create generic unknown Date or Hour members.
+
+#### Measure rules
+
+- **Trip count:** `SUM(trip_count)`, where `trip_count = 1` for every accepted trip inside the reporting window.
+- **Pickup count:** trip count grouped through the pickup Taxi Zone role.
+- **Drop-off count:** trip count grouped through the drop-off Taxi Zone role.
+- **Average trip duration:** average `trip_duration_seconds / 60.0` only when drop-off is strictly later than pickup.
+- **Average trip distance:** average non-null distance greater than or equal to zero.
+- **Average fare amount:** average non-null, non-negative `fare_amount_usd`. This represents `fare_amount` and excludes tolls, surcharges, and tips.
+
+Q1 uses pickup date, day of week, and hour as its time context while presenting pickup-zone and drop-off-zone results separately. Q2 groups measures by the weather classification matched at pickup hour. Q3 produces separate pickup-role and drop-off-role results; weather in both remains the pickup-hour classification.
+
+An invalid value for one measure does not automatically remove the row from unrelated measures. Preserve the row through quality flags or quarantine according to the applicable policy.
+
+#### Incremental and rerun behavior
+
+- Trip and weather fact keys are deterministic; rerunning identical approved input must not create extra fact rows.
+- A complete revised source contribution replaces the prior contribution rather than being appended beside stale rows.
+- `dim_taxi_zone` uses a deterministic full refresh from the selected complete snapshot.
+- `dim_date`, `dim_hour`, and `dim_weather_classification` are reproducible from deterministic seeds and rules.
+- Operational fields such as `run_id` and `ingested_at` may change on replay; business content and row counts remain stable for identical input.
+
+#### Consequences
+
+- Q4 creates no traffic-model dependency while deferred.
+- Pickup and drop-off roles must not be collapsed into one ambiguous zone or time field.
+- Analytics must not sum hourly weather measurements through trip rows.
+- The six Gold tables form the implementation contract after Issue #17 approval.
+- A change to a table, grain, key, relationship, classification, or analytical measure must update the data model, dictionary, source-to-target mapping, this log, DBML source, and exported diagram together.
+
+## Namespace and workflow decision
+
+### D13: Databricks namespace and naming
+
+**Status:** Approved through Issue #3  
+**Decision date:** 2026-09-14  
+**Revised:** 2026-09-15 after review
+
+Use the `ftw-week-08` catalog and the existing R2-backed Volume:
+
+```text
+`ftw-week-08`.`00-source`.group_a_source
+```
+
+Persisted processing objects use these schemas:
+
+| Pipeline responsibility | Schema |
+|---|---|
+| Control state | `01-control` |
+| Bronze | `02-bronze` |
+| Silver | `03-silver` |
+| Integration step | No dedicated schema initially; writes approved integrated outputs to Gold |
+| Gold | `05-gold` |
+| Analytics | `06-analytics` |
+
+Schema numbers align with the numbered `sql/` folders and sort the catalog in pipeline order. Table names do not repeat the group name because the approved processing schemas are dedicated to Group A.
+
+Stage 00 profiles source files and creates no processing schema. Stage 04 integration resolves trip relationships without changing the trip grain, so it writes to Gold initially. The `04-` slot remains available rather than forcing later renames.
+
+A dedicated `04-integration` schema requires a new decision if integration begins producing a different grain, several Gold facts reuse an expensive persisted join, or the output requires separate write ownership.
+
+**Rejected alternatives:**
+
+- Unnumbered schemas such as `bronze`, `silver`, and `gold`, because they sort alphabetically rather than in pipeline order and would leave `00-source` as the only numbered stage.
+- Numbering table names as well, because the schema already identifies the layer and identifiers beginning with digits would require additional quoting.
+- Storing control state in Bronze, because pipeline runs, source batches, checkpoints, and data-quality results have different grains and lifecycles from source-preserving business data.
+
+**Consequences:**
+
+- Catalog and schema identifiers containing hyphens or beginning with digits require backticks in SQL.
+- Table and column names must not begin with digits.
+- The processing schemas are assumed to be dedicated to Group A. Revisit the namespace before implementation if another group must share them.
+- Gold table names are governed by D12 and the approved model documents.
