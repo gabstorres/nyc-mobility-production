@@ -16,6 +16,7 @@ Record problem, decision, reason, rejected alternative, assumption, consequence,
 | D08 | One branch/work item and reviewer | Reliability and maintainability of shared changes | Separate developer outputs from integration targets | Proposed |
 | D09 | Request and store weather in UTC at Bronze; convert to America/New_York in Silver | Correctness/reliability: keeps Bronze source-faithful and unmodified per `docs/architecture.md`, and avoids depending on Open-Meteo's own timezone-localization behavior, which was not verified to be DST-aware per hour across the profiled window | Silver-layer conversion must use a DST-aware IANA timezone conversion (`America/New_York`), never a fixed `-4`/`-5` hour offset, given the confirmed March 8, 2026 spring-forward transition inside the March-May 2026 window; taxi's timezone still needs empirical confirmation for Issue #16 before the join logic is finalized | Proposed |
 | D10 | Composite business key hash as the "fingerprint" / duplicate identifier & quarantine policy for Green Taxi duplicates | Correctness before completeness; rejected automated survivorship (total_amount > 0) and used a blanket rule to quarantine all affected duplicate rows instead | Will quarantine all colliding rows (14 rows, 0.010% rate) to a separate table; will halt clean load if >1% | Proposed |
+| D11 | Use a full-refresh strategy for the Taxi Zones reference dataset | The Taxi Zones source is a small static reference snapshot (265 rows) delivered as a complete lookup file rather than a transactional or append-only dataset. Full refresh provides deterministic rerun behavior and avoids unnecessary incremental logic, checksum-based snapshot management, and merge complexity. Rejected alternative: incremental row-level processing for a static lookup table. Rejected alternative: `COPY INTO`-based incremental ingestion, which is more appropriate for continuously arriving files such as the monthly Green Taxi extracts. | Rerunning the same source file produces the same row count and business content. Operational metadata such as `ingested_at` is expected to change between runs. When a newer approved Taxi Zones snapshot becomes available, the table is rebuilt from the complete source snapshot. | Proposed for Issue #22 |
 
 Whenever a decision changes, update the relevant canonical documents in the same PR and explicitly identify any remaining stale documents. This log explains choices; detailed implementation contracts live in ingestion/model/architecture documents.
 
@@ -81,4 +82,60 @@ Consequence and Policy:
 - Threshold Gate: A quarantine threshold of 1% will be enforced. The observed baseline across March–May is 0.010% (14 quarantined rows vs. 133,353 clean rows); if a batch exceeds this threshold, the pipeline will halt loading the clean silver table, but will still load the silver quarantine table to allow investigation.
 - Idempotency: The process will rely on full Bronze re-reads and overwrite mode to guarantee that identical inputs consistently yield identical clean and quarantine table outputs on every rerun. 
 
+## Taxi Zones full-refresh ingestion
+
+Status: Proposed for Issue #22
+
+Decision date: `Sep 16 2026`
+
+The Taxi Zones dataset is a small static reference lookup containing 265 rows and delivered as a complete source snapshot.
+
+The Bronze Taxi Zones table uses a full-refresh strategy implemented with `CREATE OR REPLACE TABLE`.
+
+The source snapshot is loaded into:
+
+`ftw-week-08`.`01-bronze`.`taxi_zones_raw`
+
+### Reason
+
+The Taxi Zones source is a complete lookup dataset rather than a stream of independent transactional records.
+
+A full refresh is intentionally chosen because:
+
+1. The complete dataset is available in a single source file.
+2. The dataset is small and inexpensive to reload.
+3. Full refresh produces deterministic rerun behavior.
+4. Replacing the dataset is easier to validate than implementing row-level change tracking.
+5. Incremental processing would add unnecessary complexity without providing meaningful performance benefits.
+
+### Rerun behavior
+
+Rerunning ingestion against the same Taxi Zones source file produces:
+
+- The same row count.
+- The same business content.
+- No duplicate business records.
+
+Operational metadata such as `ingested_at` will reflect the latest ingestion run and is expected to change between executions.
+
+### Rejected alternative: incremental processing
+
+Using `INSERT INTO`, `MERGE`, or similar row-level incremental logic was rejected because Taxi Zones is not an append-only transactional source.
+
+An incremental approach would require additional logic to identify inserts, updates, deletes, checksum management, and snapshot version tracking. For a static 265-row reference lookup table, this complexity provides little benefit.
+
+### Rejected alternative: COPY INTO
+
+`COPY INTO` is appropriate for sources that arrive incrementally as new files, such as the monthly Green Taxi Parquet extracts.
+
+Taxi Zones is currently a single reference CSV snapshot rather than a continuously arriving dataset. Using `COPY INTO` would not eliminate the need for additional snapshot-management logic and would not provide meaningful advantages over a deterministic full refresh.
+
+### Consequences
+
+- The Taxi Zones reference table can be rebuilt deterministically.
+- Rerunning ingestion is safe and repeatable.
+- Duplicate records are not introduced during reruns.
+- Implementation complexity is minimized for a small static lookup dataset.
+- Future ingestion logic can be revisited if the source begins publishing versioned or incremental snapshots.
+``
 

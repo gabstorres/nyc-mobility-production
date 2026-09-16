@@ -28,11 +28,50 @@ One source owner acquires each immutable input; everyone uses the same recorded 
 |---|---|---|
 | Taxi | Source logical month + content checksum | Identical successful version is a no-op; different content is a revision. Preserve raw history; replace only that source contribution if it is confirmed a full replacement snapshot |
 | Weather | Canonical request parameters/window + response content version | Fetch missing windows. Replay stored input for deterministic reruns. Refresh history explicitly; compare normalized weather content, since volatile response metadata can change raw checksums |
-| Zones | Snapshot checksum | Preserve snapshots; validate and refresh selected small reference when changed; pin selected version for historical replay |
+| Zones | Source file version / approved snapshot | Full-refresh the Taxi Zones reference table from the approved source snapshot. Rerunning the same source file produces the same row count and business content. Incremental processing and snapshot-history management are intentionally not used because Taxi Zones is a small static reference dataset (265 rows). |
 
 Keep input identity separate from execution attempts. Proposed manifest fields: source_system, source_object, source_period, request_parameters, content_sha256, source_version_id, batch_id, raw_uri, status, discovered_at, ingested_at, row_count, schema_fingerprint. Proposed run/checkpoint fields: run_id, batch_id, layer, code_revision, configuration_version, status, timestamps, target_commit_reference, counts and error.
 
 Skip only completed work for the applicable layer and code/configuration version. Bronze success must not skip a failed Silver step. A code change may require an explicit replay even if the source checksum is unchanged.
+
+## Taxi Zones ingestion
+
+Source:
+- taxi_zone_lookup.csv
+
+Target table:
+- `ftw-week-08`.`01-bronze`.`taxi_zones_raw`
+
+Load strategy:
+- Full refresh (`CREATE OR REPLACE TABLE`)
+
+Reason:
+
+The Taxi Zones dataset is a small static reference lookup containing 265 rows and delivered as a complete source snapshot rather than a transactional or append-only source.
+
+A full refresh is intentionally chosen because:
+
+1. The complete dataset is available in a single file.
+2. The dataset is small and inexpensive to reload.
+3. Full refresh produces deterministic rerun behavior.
+4. Incremental processing would introduce unnecessary complexity without meaningful performance benefits.
+
+Rerun behavior:
+
+Rerunning the same source file produces:
+
+- The same row count.
+- The same business content.
+- No duplicate business records.
+
+Operational metadata such as `ingested_at` is expected to change between runs because it records the timestamp of the ingestion execution.
+
+Validation:
+
+- Expected row count: 265
+- LocationID must be unique
+- No duplicate LocationID values
+- Source metadata retained
 
 ## Failures and recovery
 
