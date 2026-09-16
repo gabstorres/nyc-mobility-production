@@ -64,7 +64,7 @@ Its workspace path is:
 
 Every schema carries the number of its pipeline stage, following the existing
 `00-source` schema. The number is the stage, so the same number means the same
-thing in the catalog browser and in `sql/`.
+thing in the catalog browser and in `etl/`.
 
 The approved schemas are:
 
@@ -83,19 +83,14 @@ and are not expected to match one-to-one:
 
 | Stage | Code lives here | Tables land here |
 |---|---|---|
-| 00 Source | `sql/00_source_profile/` | no tables; reads the source Volume |
-| 01 Control | `sql/01_control/` | `01-control` |
-| 02 Bronze | `sql/02_bronze/` | `02-bronze` |
-| 03 Silver | `sql/03_silver/` | `03-silver` |
-| 04 Integration | `sql/04_integration/` | `05-gold` |
-| 05 Gold | `sql/05_gold/` | `05-gold` |
-| 06 Analytics | `sql/06_analytics/` | `06-analytics` |
+| 01 Control | `etl/01_control/` | `01-control` |
+| 02 Bronze | `etl/02_bronze/` | `02-bronze` |
+| 03 Silver | `etl/03_silver/` | `03-silver` |
+| 04 Integration | `etl/04_integration/` | `05-gold` |
+| 05 Gold | `etl/05_gold/` | `05-gold` |
+| 06 Analytics | `etl/06_analytics/` | `06-analytics` |
 
-Two stages create no schema of their own. Stage 00 only profiles the source
-files. Stage 04 resolves trips to zones and to the weather hour, which does not
-change the grain of a trip, so its output is written by the Gold build rather
-than persisted as a separate layer. Join-coverage counts from stage 04 are
-recorded in `01-control`.
+One stage creates no schema of their own. Stage 04 resolves trips to zones and to the weather hour, which does not change the grain of a trip, so its output is written by the Gold build rather than persisted as a separate layer. Join-coverage counts from stage 04 are recorded in `01-control`.
 
 Do not renumber Gold and Analytics to close the `04-` gap. If integration later
 produces something at its own grain, `04-integration` drops into the empty slot
@@ -219,7 +214,7 @@ Each shared table must have one accountable owner and one approved implementatio
 | Taxi-zone ingestion and standardization | Bri | Haze |
 | Silver taxi transformations | Bri | Haze |
 | Gold fact implementation | Ina | Crystal |
-| Gold dimensions | Assigned after Issue #17 | Assigned by review pair |
+| Gold dimensions | Haze | Ina |
 | Analytics datasets and dashboard | Gab | Bri |
 | DQ contract, checks and dashboard | Haze | Ina |
 | Integration and final rerun | Ina | Crystal |
