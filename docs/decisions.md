@@ -15,6 +15,7 @@ Record problem, decision, reason, rejected alternative, assumption, consequence,
 | D07 | No SCD Type 2 for zones initially | Maintainability; no agreed question requires historical zone labels | Pin raw snapshot for reproducibility | Proposed |
 | D08 | One branch/work item and reviewer | Reliability and maintainability of shared changes | Separate developer outputs from integration targets | Proposed |
 | D09 | Request and store weather in UTC at Bronze; convert to America/New_York in Silver | Correctness/reliability: keeps Bronze source-faithful and unmodified per `docs/architecture.md`, and avoids depending on Open-Meteo's own timezone-localization behavior, which was not verified to be DST-aware per hour across the profiled window | Silver-layer conversion must use a DST-aware IANA timezone conversion (`America/New_York`), never a fixed `-4`/`-5` hour offset, given the confirmed March 8, 2026 spring-forward transition inside the March-May 2026 window; taxi's timezone still needs empirical confirmation for Issue #16 before the join logic is finalized | Proposed |
+| D10 | Composite business key hash as the "fingerprint" / duplicate identifier & quarantine policy for Green Taxi duplicates | Correctness before completeness; rejected automated survivorship (total_amount > 0) and used a blanket rule to quarantine all affected duplicate rows instead | Will quarantine all colliding rows (14 rows, 0.010% rate) to a separate table; will halt clean load if >1% | Proposed |
 
 Whenever a decision changes, update the relevant canonical documents in the same PR and explicitly identify any remaining stale documents. This log explains choices; detailed implementation contracts live in ingestion/model/architecture documents.
 
@@ -60,3 +61,24 @@ Alternative rejected: requesting Open-Meteo data pre-localized to `America/New_Y
 Assumption: taxi (`lpep_pickup_datetime`/`lpep_dropoff_datetime`) timestamps are already recorded in `America/New_York` local time. This still requires empirical confirmation via the DST-transition check tracked under Issue #16 before the join logic below is treated as final. If taxi timestamps turn out to be UTC instead, both weather and taxi receive the same Silver-layer conversion, not just weather.
 
 Consequence: any Silver transformation touching `weather_hourly.time` must convert it using a real IANA timezone library, correctly handling the March 8, 2026 spring-forward boundary inside the profiled window — a naive fixed-offset conversion would misjoin every weather-to-trip pairing on one side of that boundary by exactly one hour. A worked 2am example spanning that boundary must be included in the same PR that implements this conversion, per Issue #16's acceptance evidence.
+
+
+## Green Taxi Trip Dataset Duplicate Identification and Treatment Policy
+Status: Proposed for Issue #14
+
+Decision date: `Sep 15 2026`
+
+To identify and handle duplicates in the Green Taxi trip dataset in the absence of a natural trip ID in the source, a composite business key will be constructed using `VendorID`, `lpep_pickup_datetime`, `lpep_dropoff_datetime`, `PULocationID`, `DOLocationID`, `trip_distance`, and `fare_amount`.
+
+Fields with high null rates (~13–15%, such as `passenger_count`, `payment_type`, `RatecodeID`, `trip_type`, and `congestion_surcharge`) will be intentionally excluded to prevent unstable hash matching.
+
+ A SHA-256 digest (trip_hash) will be generated from this composite key to detect collisions across the full cumulative Bronze table (March–May 2026, spanning 133,367 total rows).
+
+ Alternative rejected: Automatic survivorship rules (e.g., selecting total_amount > 0). Although manual inspection of all 7 collision groups (14 total rows) across March, April, and May showed consistent reversal/correction pairs (identical trip identity with sign-flipped charge fields netting to zero), we cannon rule out the possibility of future duplicate scenarios that the total_amount > 0 may not be able to catch, hence using a blanket rule to quarantine ALL affected duplicate rows instead. Consequently, automated survivorship was dropped in favor of strict correctness.
+
+Consequence and Policy:
+- Quarantine Strategy: Every row involved in a collision will be excluded from the future clean Silver table and routed to a separate quarantine table (`green_taxi_trip_quarantine_silver` (not yet the final table name)) tagged with FIX, ensuring the clean table (`green_taxi_tripdata_silver` (not yet the final table name)) will be trustworthy by construction without requiring downstream filters.
+- Threshold Gate: A quarantine threshold of 1% will be enforced. The observed baseline across March–May is 0.010% (14 quarantined rows vs. 133,353 clean rows); if a batch exceeds this threshold, the pipeline will halt loading the clean silver table, but will still load the silver quarantine table to allow investigation.
+- Idempotency: The process will rely on full Bronze re-reads and overwrite mode to guarantee that identical inputs consistently yield identical clean and quarantine table outputs on every rerun. 
+
+
