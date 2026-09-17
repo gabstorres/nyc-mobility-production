@@ -1,0 +1,41 @@
+-- ============================================================
+-- Integration gate
+--
+-- Stage:     04 Integration validation
+-- Runs after: etl/04_integration/20_resolve_trip_weather.sql
+-- Target:    `ftw-week-08`.`01-control` DQ results
+-- Grain:     one row per check per run
+-- Contract:  docs/data_model.md, docs/source_to_target_mapping.md
+-- Owner:     TODO
+--
+-- First stage that needs every source. Gold runs only when this passes.
+-- ============================================================
+
+-- Checks to implement, per docs/validation.md:
+--   - row count unchanged from Silver green_taxi_clean, no fan-out
+--   - unmatched pickup and drop-off zone counts, by match status
+--   - unmatched weather counts, by match status
+--   - zero rows with more than one weather match (blocking)
+--   - at least one measure reconciled against Silver, e.g. SUM(fare_amount_usd)
+--
+-- Write one row per check to the team's DQ results table, then fail the task
+-- when a blocking check failed, so downstream stages are skipped:
+--
+--   SELECT CASE
+--            WHEN COUNT_IF(status = 'FAIL') > 0
+--            THEN raise_error(concat('Integration gate BLOCKED: ',
+--                                    CAST(COUNT_IF(status = 'FAIL') AS STRING),
+--                                    ' failed checks'))
+--          END
+--   FROM `ftw-week-08`.`01-control`.data_quality_results
+--   WHERE run_id = dq_run_id;
+--
+-- Status rule, shared by every gate: INFO stays INFO; fail_count = 0 is PASS;
+-- severity FAIL is FAIL; a WARN check above its threshold_pct becomes FAIL.
+-- fail_pct and threshold_pct are both percentages.
+
+-- ------------------------------------------------------------
+-- Remove this block when the query above is implemented. It keeps an
+-- unfinished stage from looking successful in a Databricks job run.
+-- ------------------------------------------------------------
+SELECT raise_error('90_validate_integration.sql is not implemented yet');
