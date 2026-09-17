@@ -45,7 +45,7 @@ guess which schema a folder writes to.
 
 | Stage | Scope | Code lives here | Tables land here |
 |---|---|---|---|
-| 00 | Source: raw files as received | none — profiling lives in `notebooks/` | no tables |
+| 00 | Source: raw files as received | profiling is in `notebooks/` | no tables |
 | 01 | Control: runs, ingestion batches, DQ results | `etl/01_control/` | `ftw-week-08`.`01-control` |
 | 02 | Bronze: source landed with provenance, unchanged | `etl/02_bronze/` | `ftw-week-08`.`02-bronze` |
 | 03 | Silver: typed, standardized, deduplicated, same grain | `etl/03_silver/` | `ftw-week-08`.`03-silver` |
