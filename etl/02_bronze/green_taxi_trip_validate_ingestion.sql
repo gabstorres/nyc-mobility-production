@@ -15,7 +15,7 @@ SELECT
     COUNT(*) AS bronze_row_count,
     ib.row_count AS logged_row_count,
     CASE WHEN COUNT(*) = ib.row_count THEN 'MATCH' ELSE 'MISMATCH' END AS reconciliation
-FROM `ftw-week-08`.`01-bronze`.green_taxi_raw b
+FROM `ftw-week-08`.`02-bronze`.green_taxi_raw b
 JOIN `ftw-week-08`.`01-control`.ingestion_batches ib
     ON b.batch_id = ib.batch_id
 GROUP BY b.source_file, b.batch_id, ib.row_count
@@ -30,7 +30,7 @@ SELECT
     batch_id,
     source_file,
     COUNT(*) AS row_count
-FROM `ftw-week-08`.`01-bronze`.green_taxi_raw
+FROM `ftw-week-08`.`02-bronze`.green_taxi_raw
 GROUP BY batch_id, source_file
 ORDER BY source_file;
 
@@ -44,7 +44,7 @@ SELECT
     SUM(CASE WHEN source_file IS NULL THEN 1 ELSE 0 END) AS null_source_file,
     SUM(CASE WHEN ingested_at IS NULL THEN 1 ELSE 0 END) AS null_ingested_at,
     SUM(CASE WHEN batch_id IS NULL THEN 1 ELSE 0 END) AS null_batch_id
-FROM `ftw-week-08`.`01-bronze`.green_taxi_raw;
+FROM `ftw-week-08`.`02-bronze`.green_taxi_raw;
 
 
 -- 4. Every SUCCESS batch in the control table should have a matching set
@@ -56,7 +56,7 @@ SELECT
     ib.row_count AS logged_row_count,
     COUNT(b.batch_id) AS actual_bronze_rows
 FROM `ftw-week-08`.`01-control`.ingestion_batches ib
-LEFT JOIN `ftw-week-08`.`01-bronze`.green_taxi_raw b
+LEFT JOIN `ftw-week-08`.`02-bronze`.green_taxi_raw b
     ON ib.batch_id = b.batch_id
 WHERE ib.source_system = 'green_taxi'
   AND ib.status = 'SUCCESS'
