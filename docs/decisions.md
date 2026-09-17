@@ -38,7 +38,8 @@ This log explains why choices were made. Detailed implementation contracts live 
 | D13 | Use numbered Databricks schemas aligned with pipeline stages | Approved through Issue #3 | Persisted objects use `01-control`, `02-bronze`, `03-silver`, `05-gold`, and `06-analytics` |
 | D14 | Build `ingestion_batches` as a standalone control table, scoped before Bronze ingestion; `pipeline_runs` deferred | Approved | The pipeline can answer "have we already processed this?" from a persisted table without requiring per-layer run tracking yet |
 | D15 | Retain quality-flagged Green Taxi rows in the clean Silver table instead of quarantining them; quarantine only duplicate collisions | Active | `green_taxi_clean` requires explicit flag filtering per measure; only D10 duplicates are excluded from it |
-| D16 | Validate Bronze and Silver per source with a shared result contract; remove `etl/00_source_profile/` | Proposed | Each source has its own gate and may advance independently; Integration requires every source's Silver gate |
+| D16 | Standardize Taxi Zones in Silver and preserve sentinel records | Approved through Issue #29 | Taxi Zone IDs 264 and 265 remain explicit Silver members and location_id uniqueness is validated on every load |
+| D17 | Validate Bronze and Silver per source with a shared result contract; remove `etl/00_source_profile/` | Proposed | Each source has its own gate and may advance independently; Integration requires every source's Silver gate |
 
 
 ## Foundational decisions
@@ -482,10 +483,40 @@ explicitly (e.g. `WHERE NOT negative_fare_flag`) rather than assuming
 - `etl/03_silver/10_clean_green_taxi.sql`
 - `etl/03_silver/90_validate_green_taxi.sql`
 
+### D16: Taxi Zones Silver standardization and key-validation policy
+
+**Status:** Approved through Issue #29  
+**Decision date:** 2026-09-17
+
+Standardize Taxi Zones in the Silver layer while preserving every valid source record from the selected reference snapshot.
+
+Silver processing applies to:
+
+- Zone-name cleanup
+- Service-zone standardization
+- Zone classification derivation
+- Sentinel-record handling
+- LocationID validation
+
+Borough values remain explicit source values and are not converted to lowercase or rewritten.
+
+Examples:
+
+- Bronx → Bronx
+- Brooklyn → Brooklyn
+- Manhattan → Manhattan
+- Queens → Queens
+- Staten Island → Staten Island
+- EWR → EWR
+- N/A → N/A
+- Unknown → Unknown
+
+Classification logic is handled separately through zone_classification.
+
 
 ## Validation structure decision
 
-### D16: Validation gates per source, and no source-profile folder
+### D17: Validation gates per source, and no source-profile folder
 
 **Status:** Proposed
 **Decision date:** 2026-09-17
@@ -544,8 +575,8 @@ explicitly (e.g. `WHERE NOT negative_fare_flag`) rather than assuming
   this decision (for example, `etl/01_control/validate_taxi_zones.ipynb`
   became `etl/02_bronze/90_validate_taxi_zones.sql`). Notebooks are committed
   in Databricks source format, and `.py` is used only where a step needs Python.
-- Table definitions for Bronze live in `etl/02_bronze/00_create_bronze_tables.sql`,
-  following the README's `00` setup convention.
+- Each Bronze load file creates its own table with `CREATE TABLE IF NOT EXISTS`, so
+  it runs on its own; only shared control tables have a separate `00` setup file.
 - `src/ingestion/batch_tracking.py` and `src/ingestion/schema_drift_check.py`
   keep their descriptive names; the README tree lists them instead of a single
   `common.py`, because the file name should say what the module does.

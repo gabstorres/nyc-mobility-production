@@ -4,7 +4,7 @@ This document defines the evidence required to prove every pipeline layer is com
 
 Status: Bronze and Silver checks have been run for Green Taxi (see the proof table below). Weather and Taxi Zones gates are in progress. A result is accepted only when its evidence is recorded.
 
-## Gates per source (D16)
+## Gates per source (D17)
 
 Bronze and Silver are validated **per source**, not once per layer. Each source defines good data differently, and sources are ingested on different schedules, so one combined gate would block a finished source on an unfinished one.
 

@@ -122,7 +122,6 @@ nyc-mobility-pipeline/
 │   │   └── 90_validate_control.sql
 │   │
 │   ├── 02_bronze/
-│   │   ├── 00_create_bronze_tables.sql
 │   │   ├── 10_load_green_taxi.py
 │   │   ├── 20_load_open_meteo.sql
 │   │   ├── 30_load_taxi_zones.sql
@@ -208,7 +207,7 @@ must not be duplicated between `src/`, `etl/`, and notebooks.
 | Type | Use it when | Form |
 |---|---|---|
 | `.py` | The step needs Python: file discovery, checksums, API calls, or batch tracking | Databricks source-format notebook (`# Databricks notebook source`) that calls `src/ingestion/` |
-| `.sql` | The step is table setup, a SQL transformation, or validation | Plain SQL script, or a Databricks source-format SQL notebook (`-- Databricks notebook source`) when it needs markdown or several cells |
+| `.sql` | The step is a SQL transformation or validation | Plain SQL script, or a Databricks source-format SQL notebook (`-- Databricks notebook source`) when it needs markdown or several cells |
 
 Commit notebooks in source format, not `.ipynb`, so pull requests show readable
 diffs and no cell output is committed.

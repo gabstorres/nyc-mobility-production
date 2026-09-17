@@ -32,9 +32,19 @@ CATALOG = "`ftw-week-08`"
 # test_allowlists_are_not_stale fails as soon as an entry no longer matches,
 # so the list cannot silently rot.
 
-# PR #70 results table; to move to `01-control`.data_quality_results (D16).
+# PR #70 results table; to move to `01-control`.data_quality_results (D17).
 KNOWN_DIGIT_TABLE_NAMES = {
     ("etl/02_bronze/90_validate_taxi_zones.sql", "90_validate_taxi_zones"),
+}
+
+# Silver Taxi Zones work in progress (#81 / issue #29). To be renamed to the
+# README layout and saved in Databricks source format by its owner.
+KNOWN_LAYOUT_EXCEPTIONS = {
+    "etl/03_silver/taxi_zones_create_table_silver.sql.dbquery.ipynb",
+    "etl/03_silver/taxi_zones_validate_silver.sql",
+}
+KNOWN_IPYNB_OUTSIDE_NOTEBOOKS = {
+    "etl/03_silver/taxi_zones_create_table_silver.sql.dbquery.ipynb",
 }
 
 
@@ -85,6 +95,7 @@ def test_no_ipynb_outside_notebooks_folder():
     offenders = [
         str(path) for path in files_with_suffix(".ipynb")
         if path.parts[0] != "notebooks"
+        and str(path) not in KNOWN_IPYNB_OUTSIDE_NOTEBOOKS
     ]
     assert not offenders, (
         "Commit notebooks in Databricks source format (.py or .sql), not .ipynb: "
@@ -97,6 +108,8 @@ def test_etl_files_follow_layout():
     for path in FILES:
         if path.parts[0] != "etl" or len(path.parts) == 2:
             continue  # files directly under etl/, such as etl/README.md
+        if str(path) in KNOWN_LAYOUT_EXCEPTIONS:
+            continue
         layer, name = path.parts[1], path.parts[-1]
         if layer not in ETL_LAYERS:
             problems.append(f"{path}: unknown layer folder '{layer}'")
@@ -149,6 +162,12 @@ def test_allowlists_are_not_stale():
     """Fails when a known violation is fixed, so the allowlists get cleaned up."""
     tracked = {str(path) for path in FILES}
     stale = []
+    for path in sorted(KNOWN_LAYOUT_EXCEPTIONS):
+        if path not in tracked or ETL_FILE_NAME.match(Path(path).name):
+            stale.append(("KNOWN_LAYOUT_EXCEPTIONS", path))
+    for path in sorted(KNOWN_IPYNB_OUTSIDE_NOTEBOOKS):
+        if path not in tracked:
+            stale.append(("KNOWN_IPYNB_OUTSIDE_NOTEBOOKS", path))
     for path, name in sorted(KNOWN_DIGIT_TABLE_NAMES):
         if path not in tracked or name not in digit_table_names(read(Path(path))):
             stale.append(("KNOWN_DIGIT_TABLE_NAMES", (path, name)))
