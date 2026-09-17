@@ -118,8 +118,9 @@ nyc-mobility-pipeline/
 │   │   └── 90_validate_control.sql
 │   │
 │   ├── 02_bronze/
+│   │   ├── 00_create_bronze_tables.sql
 │   │   ├── 10_load_green_taxi.py
-│   │   ├── 20_load_open_meteo.py
+│   │   ├── 20_load_open_meteo.sql
 │   │   ├── 30_load_taxi_zones.sql
 │   │   ├── 90_validate_green_taxi.sql
 │   │   ├── 90_validate_open_meteo.sql
@@ -195,6 +196,32 @@ nyc-mobility-pipeline/
 Reusable Python belongs in `src/ingestion/`. Files under `etl/` should be small
 runnable entry points or clearly scoped SQL transformations. Business logic
 must not be duplicated between `src/`, `etl/`, and notebooks.
+
+### File types under `etl/`
+
+| Type | Use it when | Form |
+|---|---|---|
+| `.py` | The step needs Python: file discovery, checksums, API calls, or batch tracking | Databricks source-format notebook (`# Databricks notebook source`) that calls `src/ingestion/` |
+| `.sql` | The step is table setup, a SQL transformation, or validation | Plain SQL script, or a Databricks source-format SQL notebook (`-- Databricks notebook source`) when it needs markdown or several cells |
+
+Commit notebooks in source format, not `.ipynb`, so pull requests show readable
+diffs and no cell output is committed.
+
+### Not yet implemented
+
+The tree above is the target layout. These files do not exist yet:
+
+| Location | Missing files |
+|---|---|
+| `src/ingestion/` | `weather.py`, `taxi_zones.py` |
+| `etl/02_bronze/` | `90_validate_open_meteo.sql` (in progress on a branch) |
+| `etl/03_silver/` | `30_clean_taxi_zones.sql`, `90_validate_weather_hourly.sql`, `90_validate_taxi_zones.sql` |
+| `etl/04_integration/` onward | All files |
+| `docs/model/` | `nyc_mobility_star_schema.dbml` |
+
+`etl/02_bronze/20_load_open_meteo.sql` reads a weather response that is already
+in the source Volume. When `src/ingestion/weather.py` adds the API request, this
+step becomes `20_load_open_meteo.py`.
 
 ## Architecture and tables
 

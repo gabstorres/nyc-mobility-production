@@ -1,14 +1,4 @@
-CREATE TABLE IF NOT EXISTS `ftw-week-08`.`02-bronze`.taxi_zones_raw (
-    location_id INT,
-    borough STRING,
-    zone STRING,
-    service_zone STRING,
-    source_file STRING,
-    source_file_version STRING,
-    batch_id STRING,
-    ingested_at TIMESTAMP
-);
-
+-- Table definition: etl/02_bronze/00_create_bronze_tables.sql
 --FULL REFRESH MODE
 CREATE OR REPLACE TABLE `ftw-week-08`.`02-bronze`.taxi_zones_raw AS
 SELECT
