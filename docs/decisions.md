@@ -489,11 +489,25 @@ explicitly (e.g. `WHERE NOT negative_fare_flag`) rather than assuming
 
 Standardize Taxi Zones in the Silver layer while preserving every valid source record from the selected reference snapshot.
 
-Silver standardization applies to:
+Silver processing applies to:
 
-- Borough values
-- Zone names
-- Service-zone values
-- Sentinel record handling
+- Zone-name cleanup
+- Service-zone standardization
+- Zone classification derivation
+- Sentinel-record handling
+- LocationID validation
 
-The Silver table is:
+Borough values remain explicit source values and are not converted to lowercase or rewritten.
+
+Examples:
+
+- Bronx → Bronx
+- Brooklyn → Brooklyn
+- Manhattan → Manhattan
+- Queens → Queens
+- Staten Island → Staten Island
+- EWR → EWR
+- N/A → N/A
+- Unknown → Unknown
+
+Classification logic is handled separately through zone_classification.
