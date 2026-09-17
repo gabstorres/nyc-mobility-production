@@ -19,4 +19,7 @@ Validation belongs beside the layer it validates. Each source has its own exit g
 
 The numeric prefixes make navigation and review order clear. They do not replace explicit Databricks job dependencies. Resolve actual names from approved configuration and use fully qualified `catalog.schema.table` references.
 
-Gold and Analytics remain placeholders until their upstream gates pass.
+Stages 04 to 06 are placeholder files: each one carries its purpose, upstream
+dependency, target table, grain and the checks to implement, and ends with a
+`raise_error` so an unfinished stage fails its job task instead of looking
+successful. Delete that block when the query is written.

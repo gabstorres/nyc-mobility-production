@@ -535,6 +535,7 @@ review rules.
 | [`docs/ingestion.md`](docs/ingestion.md) | Batch identity, reruns, and recovery |
 | [`docs/validation.md`](docs/validation.md) | Required checks and acceptance evidence |
 | [`docs/decisions.md`](docs/decisions.md) | Accepted decisions and rejected alternatives |
+| [`docs/job_setup.md`](docs/job_setup.md) | How to wire the pipeline as a Databricks job, task by task |
 
 If documentation and implementation disagree, stop and resolve the discrepancy
 through the relevant issue. Do not silently choose one.

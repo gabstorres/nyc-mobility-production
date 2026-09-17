@@ -1,0 +1,40 @@
+-- ============================================================
+-- Analytics gate
+--
+-- Stage:     06 Analytics validation
+-- Runs after: the three analytics datasets
+-- Target:    `ftw-week-08`.`01-control` DQ results
+-- Grain:     one row per check per run
+-- Contract:  docs/data_model.md, docs/source_to_target_mapping.md
+-- Owner:     TODO
+--
+-- Dashboards use validated Analytics results only.
+-- ============================================================
+
+-- Checks to implement, per docs/validation.md:
+--   - each result matches a hand-calculated spot check for one zone, date and hour
+--   - totals reconcile with Gold: SUM(trip_count) equals the fact row count
+--   - every metric's denominator is documented; zero and missing coverage handled
+--   - no unexpected nulls in reported dimensions
+--
+-- Write one row per check to the team's DQ results table, then fail the task
+-- when a blocking check failed, so downstream stages are skipped:
+--
+--   SELECT CASE
+--            WHEN COUNT_IF(status = 'FAIL') > 0
+--            THEN raise_error(concat('Analytics gate BLOCKED: ',
+--                                    CAST(COUNT_IF(status = 'FAIL') AS STRING),
+--                                    ' failed checks'))
+--          END
+--   FROM `ftw-week-08`.`01-control`.data_quality_results
+--   WHERE run_id = dq_run_id;
+--
+-- Status rule, shared by every gate: INFO stays INFO; fail_count = 0 is PASS;
+-- severity FAIL is FAIL; a WARN check above its threshold_pct becomes FAIL.
+-- fail_pct and threshold_pct are both percentages.
+
+-- ------------------------------------------------------------
+-- Remove this block when the query above is implemented. It keeps an
+-- unfinished stage from looking successful in a Databricks job run.
+-- ------------------------------------------------------------
+SELECT raise_error('90_validate_analytics.sql is not implemented yet');

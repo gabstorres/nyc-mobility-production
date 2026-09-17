@@ -1,0 +1,43 @@
+-- ============================================================
+-- Gold gate
+--
+-- Stage:     05 Gold validation
+-- Runs after: etl/05_gold/30_fact_taxi_trip.sql
+-- Target:    `ftw-week-08`.`01-control` DQ results
+-- Grain:     one row per check per run
+-- Contract:  docs/data_model.md, docs/source_to_target_mapping.md
+-- Owner:     TODO
+--
+-- Analytics runs only when this passes.
+-- ============================================================
+
+-- Checks to implement, per docs/validation.md:
+--   - every PK non-null and unique: trip_key, weather_observation_key,
+--     date_key, hour_key, zone_key, weather_classification_key
+--   - non-null FKs are non-null: pickup and drop-off date and hour keys
+--   - nullable FKs only null where a match status explains it
+--   - dim_hour has exactly 24 rows; dim_taxi_zone matches the snapshot count
+--   - fact row count matches accepted Silver trips, no fan-out
+--   - SUM(fare_amount_usd) reconciles with Silver
+--
+-- Write one row per check to the team's DQ results table, then fail the task
+-- when a blocking check failed, so downstream stages are skipped:
+--
+--   SELECT CASE
+--            WHEN COUNT_IF(status = 'FAIL') > 0
+--            THEN raise_error(concat('Gold gate BLOCKED: ',
+--                                    CAST(COUNT_IF(status = 'FAIL') AS STRING),
+--                                    ' failed checks'))
+--          END
+--   FROM `ftw-week-08`.`01-control`.data_quality_results
+--   WHERE run_id = dq_run_id;
+--
+-- Status rule, shared by every gate: INFO stays INFO; fail_count = 0 is PASS;
+-- severity FAIL is FAIL; a WARN check above its threshold_pct becomes FAIL.
+-- fail_pct and threshold_pct are both percentages.
+
+-- ------------------------------------------------------------
+-- Remove this block when the query above is implemented. It keeps an
+-- unfinished stage from looking successful in a Databricks job run.
+-- ------------------------------------------------------------
+SELECT raise_error('90_validate_gold.sql is not implemented yet');
