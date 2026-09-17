@@ -38,6 +38,7 @@ This log explains why choices were made. Detailed implementation contracts live 
 | D13 | Use numbered Databricks schemas aligned with pipeline stages | Approved through Issue #3 | Persisted objects use `01-control`, `02-bronze`, `03-silver`, `05-gold`, and `06-analytics` |
 | D14 | Build `ingestion_batches` as a standalone control table, scoped before Bronze ingestion; `pipeline_runs` deferred | Approved | The pipeline can answer "have we already processed this?" from a persisted table without requiring per-layer run tracking yet |
 | D15 | Retain quality-flagged Green Taxi rows in the clean Silver table instead of quarantining them; quarantine only duplicate collisions | Active | `green_taxi_clean` requires explicit flag filtering per measure; only D10 duplicates are excluded from it |
+| D16 | Standardize Taxi Zones in Silver and preserve sentinel records | Approved through Issue #29 | Taxi Zone IDs 264 and 265 remain explicit Silver members and location_id uniqueness is validated on every load |
 
 
 ## Foundational decisions
@@ -480,3 +481,19 @@ explicitly (e.g. `WHERE NOT negative_fare_flag`) rather than assuming
 
 - `etl/03_silver/green_taxi_trip_create_table_silver.sql`
 - `etl/03_silver/green_taxi_trip_validate_silver.sql`
+
+### D16: Taxi Zones Silver standardization and key-validation policy
+
+**Status:** Approved through Issue #29  
+**Decision date:** 2026-09-17
+
+Standardize Taxi Zones in the Silver layer while preserving every valid source record from the selected reference snapshot.
+
+Silver standardization applies to:
+
+- Borough values
+- Zone names
+- Service-zone values
+- Sentinel record handling
+
+The Silver table is:
