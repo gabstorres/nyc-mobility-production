@@ -56,9 +56,7 @@ Where the sources meet: taxi trips resolved to pickup and dropoff zones and to
 the corresponding weather observation. Unmatched records are counted before a
 join type is chosen, and expected unmatched volumes are documented rather than
 silently dropped. Integration produces no tables of its own: it adds columns to a trip without
-changing its grain, so its output is written by the Gold build. That is why
-stage 04 has an `etl/` folder but no schema. Join-coverage counts are recorded in
-`01-control`.
+changing its grain, so its output is written by the Gold build. That is why stage 04 has an `etl/` folder but no schema. Join-coverage counts are recorded in `01-control`.
  
 ### 05 Gold
  

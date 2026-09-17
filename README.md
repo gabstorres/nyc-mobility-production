@@ -91,11 +91,14 @@ nyc-mobility-pipeline/
 ├── README.md
 ├── CONTRIBUTING.md
 ├── .gitignore
+├── requirements-dev.txt
 │
 ├── .github/
 │   ├── ISSUE_TEMPLATE/
 │   │   └── work_item.md
-│   └── pull_request_template.md
+│   ├── pull_request_template.md
+│   └── workflows/
+│       └── ci.yml
 │
 ├── config/
 │   ├── project.json
@@ -159,8 +162,10 @@ nyc-mobility-pipeline/
 │   └── profile_weather.ipynb
 │
 ├── tests/
-│   ├── test_green_taxi_duplicate_policy.py
-│   └── test_notebook_source_format.py
+│   ├── conftest.py
+│   ├── test_green_taxi_deduplication_policy.py
+│   ├── test_notebook_source_format.py
+│   └── test_repo_policy.py
 │
 ├── docs/
 │   ├── architecture.md
@@ -447,18 +452,37 @@ execution logs.
 
 ## Local checks
 
-Local development currently supports Git, documentation, and static Python
-checks:
+Run the same checks as CI before opening a pull request:
 
 ```bash
-git status --short
+python -m pip install -r requirements-dev.txt
+python -m pytest tests
 git diff --check
-python -m compileall src etl tests
 ```
 
-The repository does not yet have a pinned local Python environment or complete
-automated test runner. Those instructions must be added when reusable Python
-dependencies are introduced.
+`tests/test_repo_policy.py` checks:
+
+- `.py`, `.json` and `.yml` files parse
+- no `.ipynb` outside `notebooks/`
+- files under `etl/` follow `NN_lowercase_name.sql` or `.py` in a known layer folder
+- Python files under `etl/` are Databricks source-format notebooks
+- table names do not begin with a digit (the `90_` prefix is for file names only)
+- schema references include the catalog
+
+Test files that are Databricks notebooks are skipped locally (see
+`tests/conftest.py`) and run in Databricks.
+
+### Continuous integration
+
+`.github/workflows/ci.yml` runs on every pull request to `main` and on every
+push to `main`:
+
+| Job | Fails when |
+|---|---|
+| Repository checks | `git diff --check` finds whitespace errors, or `python -m pytest tests` fails |
+| PR links an issue | The PR description has no `Closes #N`, `Part of #N`, or `Related to #N` |
+
+CI does not connect to Databricks and does not run the pipeline.
 
 ## Development workflow
 
