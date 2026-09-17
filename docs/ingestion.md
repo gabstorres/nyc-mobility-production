@@ -40,7 +40,7 @@ Source:
 - taxi_zone_lookup.csv
 
 Target table:
-- `ftw-week-08`.`01-bronze`.`taxi_zones_raw`
+- `ftw-week-08`.`02-bronze`.`taxi_zones_raw`
 
 Load strategy:
 - Full refresh (`CREATE OR REPLACE TABLE`)

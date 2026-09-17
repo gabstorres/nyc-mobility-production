@@ -7,7 +7,7 @@ from src.ingestion.batch_tracking import (
 )
 
 LANDING_PATH = "/Volumes/ftw-week-08/00-source/group_a_source/green_taxi/"
-BRONZE_TABLE = "`ftw-week-08`.`01-bronze`.green_taxi_raw"
+BRONZE_TABLE = "`ftw-week-08`.`02-bronze`.green_taxi_raw"
 SOURCE_SYSTEM = "green_taxi"
 
 

@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS `ftw-week-08`.`01-bronze`.taxi_zones_raw (
+CREATE TABLE IF NOT EXISTS `ftw-week-08`.`02-bronze`.taxi_zones_raw (
     location_id INT,
     borough STRING,
     zone STRING,
@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS `ftw-week-08`.`01-bronze`.taxi_zones_raw (
 );
 
 --FULL REFRESH MODE
-CREATE OR REPLACE TABLE `ftw-week-08`.`01-bronze`.taxi_zones_raw AS
+CREATE OR REPLACE TABLE `ftw-week-08`.`02-bronze`.taxi_zones_raw AS
 SELECT
     CAST(LocationID AS INT) AS location_id,
     Borough AS borough,
