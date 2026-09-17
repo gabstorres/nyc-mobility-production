@@ -34,6 +34,7 @@ def check_schema_drift(spark, file_paths: dict):
 
     return drift
 
+
 def check_drift_for_landing(spark, dbutils, landing_path="/Volumes/ftw-week-08/00-source/group_a_source/green_taxi/"):
     """
     Discover every file currently in the landing location and check for

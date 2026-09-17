@@ -1,3 +1,7 @@
+-- Table definition lives here so this file runs on its own. Safe to rerun.
+-- NOTE: the CREATE OR REPLACE below rebuilds the table from the SELECT, so these
+-- pinned types do not hold yet. Switching the load to INSERT OVERWRITE is tracked
+-- with the Taxi Zones Bronze rework.
 CREATE TABLE IF NOT EXISTS `ftw-week-08`.`02-bronze`.taxi_zones_raw (
     location_id INT,
     borough STRING,
@@ -8,7 +12,6 @@ CREATE TABLE IF NOT EXISTS `ftw-week-08`.`02-bronze`.taxi_zones_raw (
     batch_id STRING,
     ingested_at TIMESTAMP
 );
-
 --FULL REFRESH MODE
 CREATE OR REPLACE TABLE `ftw-week-08`.`02-bronze`.taxi_zones_raw AS
 SELECT

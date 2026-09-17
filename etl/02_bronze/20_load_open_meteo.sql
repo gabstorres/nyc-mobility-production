@@ -1,6 +1,7 @@
 -- Bronze landing for the Open-Meteo historical weather source.
 -- Bronze preserves the response structure: one row per API response, arrays intact.
 
+-- Table definition lives here so this file runs on its own. Safe to rerun.
 CREATE TABLE IF NOT EXISTS `ftw-week-08`.`02-bronze`.open_meteo_weather_raw (
     coordinate_id STRING,
     requested_latitude DOUBLE,
