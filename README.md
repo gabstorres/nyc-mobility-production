@@ -163,7 +163,7 @@ nyc-mobility-pipeline/
 │
 ├── tests/
 │   ├── conftest.py
-│   ├── test_green_taxi_duplicate_policy.py
+│   ├── test_green_taxi_deduplication_policy.py
 │   ├── test_notebook_source_format.py
 │   └── test_repo_policy.py
 │

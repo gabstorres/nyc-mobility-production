@@ -28,11 +28,33 @@ ETL_FILE_NAME = re.compile(r"^\d{2}_[a-z0-9_]+\.(sql|py)$")
 PROJECT_SCHEMA = r"`0[1-6]-[a-z]+`"
 CATALOG = "`ftw-week-08`"
 
-# Known violations that already exist on main. Each entry must name the fix.
-# Remove an entry as soon as the fix merges; the test fails if an entry is stale.
+# Known violations that already exist on main. New violations still fail.
+# Remove entries when the fix merges; test_allowlists_are_not_stale fails
+# as soon as an entry no longer matches, so the lists cannot silently rot.
+
+# Fixed by the repo-structure PR (docs/issue-49-align-repo-structure),
+# which moves these files to the README layout.
+KNOWN_LAYOUT_EXCEPTIONS = {
+    "etl/01_control/ingestion_batches_create_table.sql",
+    "etl/01_control/ingestion_batches_validate.sql",
+    "etl/01_control/validate_taxi_zones.ipynb",
+    "etl/02_bronze/green_taxi_trip_create_table.sql",
+    "etl/02_bronze/green_taxi_trip_validate_ingestion.sql",
+    "etl/02_bronze/open_meteo_weather_raw.sql",
+    "etl/02_bronze/taxi_zones_raw.sql",
+    "etl/03_silver/green_taxi_trip_create_table_silver.sql",
+    "etl/03_silver/green_taxi_trip_validate_silver.sql",
+    "etl/03_silver/weather_hourly.sql",
+}
+
+# Fixed by the repo-structure PR, which converts it to source-format SQL.
+KNOWN_IPYNB_OUTSIDE_NOTEBOOKS = {
+    "etl/01_control/validate_taxi_zones.ipynb",
+}
+
+# PR #70 results table; to move to `01-control`.data_quality_results (D16).
 KNOWN_DIGIT_TABLE_NAMES = {
-    # PR #70 results table; to move to `01-control`.data_quality_results (D16)
-    ("etl/02_bronze/90_validate_taxi_zones.sql", "90_validate_taxi_zones"),
+    ("etl/01_control/validate_taxi_zones.ipynb", "90_validate_taxi_zones"),
 }
 
 
@@ -83,6 +105,7 @@ def test_no_ipynb_outside_notebooks_folder():
     offenders = [
         str(path) for path in files_with_suffix(".ipynb")
         if path.parts[0] != "notebooks"
+        and str(path) not in KNOWN_IPYNB_OUTSIDE_NOTEBOOKS
     ]
     assert not offenders, (
         "Commit notebooks in Databricks source format (.py or .sql), not .ipynb: "
@@ -95,6 +118,8 @@ def test_etl_files_follow_layout():
     for path in FILES:
         if path.parts[0] != "etl" or len(path.parts) == 2:
             continue  # files directly under etl/, such as etl/README.md
+        if str(path) in KNOWN_LAYOUT_EXCEPTIONS:
+            continue
         layer, name = path.parts[1], path.parts[-1]
         if layer not in ETL_LAYERS:
             problems.append(f"{path}: unknown layer folder '{layer}'")
@@ -143,14 +168,20 @@ def test_table_names_do_not_start_with_a_digit(path):
     )
 
 
-def test_known_digit_table_names_are_still_present():
-    """Fails when a known violation is fixed, so the allowlist gets cleaned up."""
-    stale = [
-        entry for entry in KNOWN_DIGIT_TABLE_NAMES
-        if not (REPO_ROOT / entry[0]).exists()
-        or entry[1] not in digit_table_names(read(Path(entry[0])))
-    ]
-    assert not stale, f"Remove fixed entries from KNOWN_DIGIT_TABLE_NAMES: {stale}"
+def test_allowlists_are_not_stale():
+    """Fails when a known violation is fixed, so the allowlists get cleaned up."""
+    tracked = {str(path) for path in FILES}
+    stale = []
+    for path in sorted(KNOWN_LAYOUT_EXCEPTIONS):
+        if path not in tracked or ETL_FILE_NAME.match(Path(path).name):
+            stale.append(("KNOWN_LAYOUT_EXCEPTIONS", path))
+    for path in sorted(KNOWN_IPYNB_OUTSIDE_NOTEBOOKS):
+        if path not in tracked:
+            stale.append(("KNOWN_IPYNB_OUTSIDE_NOTEBOOKS", path))
+    for path, name in sorted(KNOWN_DIGIT_TABLE_NAMES):
+        if path not in tracked or name not in digit_table_names(read(Path(path))):
+            stale.append(("KNOWN_DIGIT_TABLE_NAMES", (path, name)))
+    assert not stale, f"Remove fixed entries from the allowlists: {stale}"
 
 
 @pytest.mark.parametrize("path", CODE_FILES, ids=str)
