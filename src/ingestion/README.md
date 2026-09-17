@@ -4,7 +4,8 @@ Source profiling is complete (`docs/source_profile.md`). Put Python file discove
 
 | Module | Purpose |
 |---|---|
-| `common.py` | Shared helpers: file hashing, path handling, `ingestion_batches` status updates, schema fingerprint and schema drift report |
+| `batch_tracking.py` | File hashing, path handling, schema fingerprint, and `ingestion_batches` status updates |
+| `schema_drift_check.py` | Compares source schemas and reports drift |
 | `green_taxi.py` | Green Taxi file discovery and Bronze load |
 | `weather.py` | Not yet implemented: Open-Meteo API request and raw capture |
 | `taxi_zones.py` | Not yet implemented; Taxi Zones currently loads through `etl/02_bronze/30_load_taxi_zones.sql` |

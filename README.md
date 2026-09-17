@@ -108,8 +108,9 @@ nyc-mobility-pipeline/
 ├── src/
 │   └── ingestion/
 │       ├── __init__.py
-│       ├── common.py
+│       ├── batch_tracking.py
 │       ├── green_taxi.py
+│       ├── schema_drift_check.py
 │       ├── weather.py
 │       └── taxi_zones.py
 │

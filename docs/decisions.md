@@ -427,13 +427,14 @@ already-processed period, not auto-incremented.
 **Files:**
 
 - `etl/01_control/00_create_control_tables.sql`: table DDL
-- `src/ingestion/common.py`: reusable register and mark-status functions
+- `src/ingestion/batch_tracking.py`: reusable register and mark-status
+  functions
 - `etl/01_control/90_validate_control.sql`: reusable validation queries (stuck
   batches, retry-history integrity)
 
 **Consequence:** Any ingestion code for Green Taxi, weather, or Taxi Zones
 must call `register_batch_discovered`, `mark_batch_started`, and either
-`mark_batch_success` or `mark_batch_failed` from `src/ingestion/common.py` rather
+`mark_batch_success` or `mark_batch_failed` from `src/ingestion/batch_tracking.py` rather
 than writing ad hoc status tracking per source.
 
 ### D15: Silver quality-flag policy for Green Taxi trips
@@ -545,8 +546,9 @@ explicitly (e.g. `WHERE NOT negative_fare_flag`) rather than assuming
   in Databricks source format, and `.py` is used only where a step needs Python.
 - Table definitions for Bronze live in `etl/02_bronze/00_create_bronze_tables.sql`,
   following the README's `00` setup convention.
-- `src/ingestion/batch_tracking.py` and `schema_drift_check.py` were merged into
-  `src/ingestion/common.py`.
+- `src/ingestion/batch_tracking.py` and `src/ingestion/schema_drift_check.py`
+  keep their descriptive names; the README tree lists them instead of a single
+  `common.py`, because the file name should say what the module does.
 - The results tables `02-bronze`.`90_validate_taxi_zones` and
   `02-bronze`.`90_validate_green_taxi` (PR #82) should write to
   `01-control`.`data_quality_results` instead.
