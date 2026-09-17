@@ -290,6 +290,10 @@ Frame
 → Incremental and Idempotency Proof
 ```
 
+Bronze and Silver gates are evaluated per source: a source may advance to its
+next layer when its own gate passes. Integration and everything after it require
+the gates of all required sources to pass.
+
 Critical DQ failures stop publication of dependent trusted layers.
 
 The DQ dashboard may display failed runs. The business dashboard must only use validated Analytics results.

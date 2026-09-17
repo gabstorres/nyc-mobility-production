@@ -39,19 +39,19 @@ Original source filenames are preserved where practical. The Volume path supplie
 ## Schemas
 
 Schema names are `<stage-number>-<layer>`, extending the existing `00-source`
-schema. The number is the pipeline stage and matches the `sql/` folder for that
+schema. The number is the pipeline stage and matches the `etl/` folder for that
 stage, so schemas sort in pipeline order in the catalog browser and nobody has to
 guess which schema a folder writes to.
 
 | Stage | Scope | Code lives here | Tables land here |
 |---|---|---|---|
-| 00 | Source: raw files as received | `sql/00_source_profile/` | no tables |
-| 01 | Control: runs, ingestion batches, DQ results | `sql/01_control/` | `ftw-week-08`.`01-control` |
-| 02 | Bronze: source landed with provenance, unchanged | `sql/02_bronze/` | `ftw-week-08`.`02-bronze` |
-| 03 | Silver: typed, standardized, deduplicated, same grain | `sql/03_silver/` | `ftw-week-08`.`03-silver` |
-| 04 | Integration: trips resolved to zones and weather | `sql/04_integration/` | `ftw-week-08`.`05-gold` |
-| 05 | Gold: approved facts and built dimensions | `sql/05_gold/` | `ftw-week-08`.`05-gold` |
-| 06 | Analytics: one dataset per business question | `sql/06_analytics/` | `ftw-week-08`.`06-analytics` |
+| 00 | Source: raw files as received | profiling is in `notebooks/` | no tables |
+| 01 | Control: runs, ingestion batches, DQ results | `etl/01_control/` | `ftw-week-08`.`01-control` |
+| 02 | Bronze: source landed with provenance, unchanged | `etl/02_bronze/` | `ftw-week-08`.`02-bronze` |
+| 03 | Silver: typed, standardized, deduplicated, same grain | `etl/03_silver/` | `ftw-week-08`.`03-silver` |
+| 04 | Integration: trips resolved to zones and weather | `etl/04_integration/` | `ftw-week-08`.`05-gold` |
+| 05 | Gold: approved facts and built dimensions | `etl/05_gold/` | `ftw-week-08`.`05-gold` |
+| 06 | Analytics: one dataset per business question | `etl/06_analytics/` | `ftw-week-08`.`06-analytics` |
 
 What each stage is responsible for is defined in
 [architecture.md](architecture.md). This document only fixes the names.

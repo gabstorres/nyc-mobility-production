@@ -38,6 +38,7 @@ This log explains why choices were made. Detailed implementation contracts live 
 | D13 | Use numbered Databricks schemas aligned with pipeline stages | Approved through Issue #3 | Persisted objects use `01-control`, `02-bronze`, `03-silver`, `05-gold`, and `06-analytics` |
 | D14 | Build `ingestion_batches` as a standalone control table, scoped before Bronze ingestion; `pipeline_runs` deferred | Approved | The pipeline can answer "have we already processed this?" from a persisted table without requiring per-layer run tracking yet |
 | D15 | Retain quality-flagged Green Taxi rows in the clean Silver table instead of quarantining them; quarantine only duplicate collisions | Active | `green_taxi_clean` requires explicit flag filtering per measure; only D10 duplicates are excluded from it |
+| D16 | Validate Bronze and Silver per source with a shared result contract; remove `etl/00_source_profile/` | Proposed | Each source has its own gate and may advance independently; Integration requires every source's Silver gate |
 
 
 ## Foundational decisions
@@ -358,9 +359,9 @@ Persisted processing objects use these schemas:
 | Gold | `05-gold` |
 | Analytics | `06-analytics` |
 
-Schema numbers align with the numbered `sql/` folders and sort the catalog in pipeline order. Table names do not repeat the group name because the approved processing schemas are dedicated to Group A.
+Schema numbers align with the numbered `etl/` folders and sort the catalog in pipeline order. Table names do not repeat the group name because the approved processing schemas are dedicated to Group A.
 
-Stage 00 profiles source files and creates no processing schema. Stage 04 integration resolves trip relationships without changing the trip grain, so it writes to Gold initially. The `04-` slot remains available rather than forcing later renames.
+Stage 00 is the source Volume; profiling happens in `notebooks/` and creates no processing schema. Stage 04 integration resolves trip relationships without changing the trip grain, so it writes to Gold initially. The `04-` slot remains available rather than forcing later renames.
 
 A dedicated `04-integration` schema requires a new decision if integration begins producing a different grain, several Gold facts reuse an expensive persisted join, or the output requires separate write ownership.
 
@@ -425,15 +426,14 @@ already-processed period, not auto-incremented.
 
 **Files:**
 
-- `etl/01_control/00_create_tables.sql`: table DDL
-- `src/ingestion/batch_tracking.py`: reusable register and mark-status
-  functions
-- `etl/01_control/90_validate.sql`: reusable validation queries (stuck
+- `etl/01_control/00_create_control_tables.sql`: table DDL
+- `src/ingestion/common.py`: reusable register and mark-status functions
+- `etl/01_control/90_validate_control.sql`: reusable validation queries (stuck
   batches, retry-history integrity)
 
 **Consequence:** Any ingestion code for Green Taxi, weather, or Taxi Zones
 must call `register_batch_discovered`, `mark_batch_started`, and either
-`mark_batch_success` or `mark_batch_failed` from `batch_tracking.py` rather
+`mark_batch_success` or `mark_batch_failed` from `src/ingestion/common.py` rather
 than writing ad hoc status tracking per source.
 
 ### D15: Silver quality-flag policy for Green Taxi trips
@@ -478,5 +478,79 @@ explicitly (e.g. `WHERE NOT negative_fare_flag`) rather than assuming
 
 **Files:**
 
-- `etl/03_silver/green_taxi_trip_create_table_silver.sql`
-- `etl/03_silver/green_taxi_trip_validate_silver.sql`
+- `etl/03_silver/10_clean_green_taxi.sql`
+- `etl/03_silver/90_validate_green_taxi.sql`
+
+
+## Validation structure decision
+
+### D16: Validation gates per source, and no source-profile folder
+
+**Status:** Proposed
+**Decision date:** 2026-09-17
+
+**Decision:**
+
+1. Bronze and Silver are validated per source. Each layer folder holds one
+   `90_validate_<source>` file per source instead of a single
+   `90_validate_<layer>` file. Integration, Gold and Analytics keep one
+   validation file each, because they combine sources.
+2. A source may advance from Bronze to Silver when its own gate passes.
+   Integration requires the Silver gates of Green Taxi, weather and Taxi Zones.
+3. All gates share one result contract, defined in `docs/validation.md`: one
+   `01-control`.`data_quality_results` table, percentage units, one status rule,
+   and lineage fields.
+4. `etl/00_source_profile/` is removed. Source profiling lives in `notebooks/`
+   and is recorded in `docs/source_profile.md`. The README repository structure
+   is the reference layout.
+
+**Reason:**
+
+- The sources define good data differently: Green Taxi needs duplicate and
+  duration rules, weather needs complete hourly coverage, and Taxi Zones needs
+  key uniqueness and special-member rules. One combined file mixes unrelated
+  rules and ownership.
+- Sources are ingested on different schedules. Green Taxi Bronze is loaded while
+  weather and Taxi Zones ingestion are still in progress; one layer gate would
+  block Green Taxi on unrelated work.
+- The profiling folder duplicated the profiling notebooks and
+  `docs/source_profile.md`.
+- Without a shared result contract, per-source notebooks had already diverged:
+  different status rules, fractional thresholds compared with percentage
+  failure rates, and separate results tables in Bronze with names starting with
+  a digit.
+
+**Rejected alternatives:**
+
+- One `90_validate_<layer>` file per layer: couples unrelated sources and blocks
+  finished sources.
+- Per-source results tables (for example `02-bronze`.`90_validate_green_taxi`):
+  cannot be combined into one gate or DQ dashboard, place control data in a
+  business schema, and break D13's rule that table names must not begin with a
+  digit.
+- Allowing Integration to start when only some sources pass: trips would be
+  resolved against unvalidated zones or weather.
+
+**Assumptions:**
+
+- Every source's checks can be expressed in the shared result format.
+- `data_quality_results` is created in `01-control` before the per-source
+  notebooks are migrated to it.
+
+**Consequences:**
+
+- Existing files were moved to the README layout in the same pull request as
+  this decision (for example, `etl/01_control/validate_taxi_zones.ipynb`
+  became `etl/02_bronze/90_validate_taxi_zones.sql`). Notebooks are committed
+  in Databricks source format, and `.py` is used only where a step needs Python.
+- Table definitions for Bronze live in `etl/02_bronze/00_create_bronze_tables.sql`,
+  following the README's `00` setup convention.
+- `src/ingestion/batch_tracking.py` and `schema_drift_check.py` were merged into
+  `src/ingestion/common.py`.
+- The results tables `02-bronze`.`90_validate_taxi_zones` and
+  `02-bronze`.`90_validate_green_taxi` (PR #82) should write to
+  `01-control`.`data_quality_results` instead.
+- The Silver weather table was built before a Bronze weather gate existed; it
+  must be revalidated once that gate passes.
+- `docs/naming_conventions.md` and `etl/README.md` now point to `etl/`, not
+  `sql/`, and no longer list `00_source_profile/`.
