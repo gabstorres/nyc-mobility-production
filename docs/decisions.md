@@ -36,7 +36,8 @@ This log explains why choices were made. Detailed implementation contracts live 
 | D11 | Full-refresh the selected Taxi Zone reference snapshot | Approved through Issue #22 | Identical input produces identical business content without incremental row-level complexity |
 | D12 | Approve three core business questions, defer optional traffic analysis, and use the two-fact Gold model | Final candidate for Issue #17 | Pickup and drop-off roles remain separate; trip and hourly-weather measurements remain at their natural grains |
 | D13 | Use numbered Databricks schemas aligned with pipeline stages | Approved through Issue #3 | Persisted objects use `01-control`, `02-bronze`, `03-silver`, `05-gold`, and `06-analytics` |
-| D14 | Build `ingestion_batches` as a standalone control table, scoped before Bronze ingestion; `pipeline_runs` deferred | Active | The pipeline can answer "have we already processed this?" from a persisted table without requiring per-layer run tracking yet |
+| D14 | Build `ingestion_batches` as a standalone control table, scoped before Bronze ingestion; `pipeline_runs` deferred | Approved | The pipeline can answer "have we already processed this?" from a persisted table without requiring per-layer run tracking yet |
+| D15 | Retain quality-flagged Green Taxi rows in the clean Silver table instead of quarantining them; quarantine only duplicate collisions | Active | `green_taxi_clean` requires explicit flag filtering per measure; only D10 duplicates are excluded from it |
 
 
 ## Foundational decisions
@@ -434,3 +435,48 @@ already-processed period, not auto-incremented.
 must call `register_batch_discovered`, `mark_batch_started`, and either
 `mark_batch_success` or `mark_batch_failed` from `batch_tracking.py` rather
 than writing ad hoc status tracking per source.
+
+### D15: Silver quality-flag policy for Green Taxi trips
+
+**Status:** Active
+**Decision date:** 2026-09-17
+
+Only duplicate hash collisions (per D10) are quarantined out of
+`green_taxi_clean`. Negative fares, negative distances,
+dropoff-before-pickup, and implausible passenger counts remain on
+`green_taxi_clean`, tagged with boolean flag columns
+(`negative_fare_flag`, `negative_distance_flag`,
+`dropoff_before_pickup_flag`, `implausible_passenger_count_flag`)
+rather than being excluded.
+
+**Reason:** D12's measure eligibility rule states an invalid value for
+one measure does not automatically remove the row from unrelated
+measures. A trip with a negative fare still has a valid pickup,
+dropoff, and location for trip-count purposes (Q1); fully quarantining
+it would discard legitimate data that unrelated measures still need.
+D10 is the only decision requiring full quarantine, and it covers
+duplicate collisions only.
+
+**Rejected alternative:** Quarantining every flagged row, as
+Issue #27's initial acceptance-evidence wording suggested
+("quantified, not silently dropped" was read as requiring quarantine
+for negative fares, bad durations, and implausible passenger counts).
+Rejected because no decision requires exclusion for these specific
+conditions, and doing so would conflict with D12's measure-eligibility
+rule.
+
+**Also computed:** `trip_hash` (D10's composite fingerprint) is
+computed in the same step as typing, from raw Bronze values before any
+casting — so rounding introduced by casting `trip_distance`/`fare_amount`
+to `DECIMAL` cannot change the hash or diverge from the fingerprint
+tested in Issue #14.
+
+**Consequence:** Any query using `fare_amount_usd`, `trip_distance_miles`,
+or duration-derived measures must filter on the relevant flag
+explicitly (e.g. `WHERE NOT negative_fare_flag`) rather than assuming
+`green_taxi_clean` contains only valid values for every measure.
+
+**Files:**
+
+- `etl/03_silver/green_taxi_trip_create_table_silver.sql`
+- `etl/03_silver/green_taxi_trip_validate_silver.sql`
