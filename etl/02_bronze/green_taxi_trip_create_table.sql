@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS `ftw-week-08`.`01-bronze`.green_taxi_raw (
+CREATE TABLE IF NOT EXISTS `ftw-week-08`.`02-bronze`.green_taxi_raw (
     VendorID INT,
     lpep_pickup_datetime TIMESTAMP_NTZ,
     lpep_dropoff_datetime TIMESTAMP_NTZ,
