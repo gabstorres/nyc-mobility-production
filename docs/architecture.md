@@ -10,7 +10,7 @@ Ingestion manifests, per-layer checkpoints and DQ results support the whole pipe
 ## Pipeline stages
  
 Each stage has a number. The number is the same in the schema name and in the
-`sql/` folder, so a stage can be identified from either side. Names are fixed in
+`etl/` folder, so a stage can be identified from either side. Names are fixed in
 [naming_conventions.md](naming_conventions.md).
  
 ### 00 Source
@@ -57,7 +57,7 @@ the corresponding weather observation. Unmatched records are counted before a
 join type is chosen, and expected unmatched volumes are documented rather than
 silently dropped. Integration produces no tables of its own: it adds columns to a trip without
 changing its grain, so its output is written by the Gold build. That is why
-stage 04 has a `sql/` folder but no schema. Join-coverage counts are recorded in
+stage 04 has a `etl/` folder but no schema. Join-coverage counts are recorded in
 `01-control`.
  
 ### 05 Gold
