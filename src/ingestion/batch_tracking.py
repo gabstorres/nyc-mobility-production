@@ -4,10 +4,17 @@ from datetime import datetime, timezone
 DEFAULT_TABLE = "`ftw-week-08`.`01-control`.ingestion_batches"
 
 
+def clean_path(path):
+    """Normalize a dbutils.fs path (dbfs:/Volumes/...) to a plain openable
+    path (/Volumes/...). Unity Catalog Volumes don't use the legacy /dbfs
+    mount convention."""
+    return path.replace("dbfs:", "")
+
+
 def hash_file(path):
     """Hash a file's raw bytes in chunks, to avoid loading the whole file into memory."""
     sha256 = hashlib.sha256()
-    with open(path.replace("dbfs:", "/dbfs"), "rb") as f:
+    with open(clean_path(path), "rb") as f:
         for chunk in iter(lambda: f.read(8192), b""):
             sha256.update(chunk)
     return sha256.hexdigest()
@@ -15,7 +22,7 @@ def hash_file(path):
 
 def get_schema_fingerprint(spark, file_path):
     """Hash the column name+type signature of a Parquet file, to detect schema drift."""
-    df = spark.read.parquet(file_path)
+    df = spark.read.parquet(clean_path(file_path))
     schema_str = "|".join(
         f"{field.name}:{field.dataType.simpleString()}" for field in df.schema.fields
     )
@@ -32,6 +39,7 @@ def register_batch_discovered(
         StructType, StructField, StringType, TimestampType, LongType,
     )
 
+    normalized_path = clean_path(file_path)
     file_info = dbutils.fs.ls(file_path)[0]
 
     batch_id = str(uuid.uuid4())
@@ -61,13 +69,13 @@ def register_batch_discovered(
     row = spark.createDataFrame([Row(
         batch_id=batch_id,
         source_system=source_system,
-        source_object=file_path.split("/")[-1],
+        source_object=normalized_path.split("/")[-1],
         source_period=source_period,
         request_parameters=None,
         content_sha256=content_hash,
         source_version_id=source_version_id,
         schema_fingerprint=schema_fingerprint,
-        raw_uri=file_path,
+        raw_uri=normalized_path,
         status="DISCOVERED",
         discovered_at=datetime.now(timezone.utc),
         started_at=None,
