@@ -63,3 +63,22 @@ WHERE ib.source_system = 'green_taxi'
 GROUP BY ib.batch_id, ib.source_object, ib.row_count
 HAVING COUNT(b.batch_id) != ib.row_count
 ORDER BY ib.source_object;
+
+-- 5. Confirm each month's row content is stable across subsequent loads.
+--    Run this any time — if March's data ever changes after April/May load,
+--    something is silently mutating already-committed rows.
+
+SELECT
+    source_file,
+    COUNT(*) AS row_count,
+    md5(
+        concat_ws('|',
+            sort_array(collect_list(
+                concat_ws('~', CAST(VendorID AS STRING), CAST(lpep_pickup_datetime AS STRING),
+                               CAST(lpep_dropoff_datetime AS STRING), CAST(fare_amount AS STRING))
+            ))
+        )
+    ) AS content_fingerprint
+FROM `ftw-week-08`.`02-bronze`.green_taxi_raw
+GROUP BY source_file
+ORDER BY source_file;
