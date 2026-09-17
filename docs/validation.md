@@ -33,9 +33,9 @@ Capture immutable evidence under a run-specific directory with the exact source 
 
 | Scenario | Run IDs | Source versions | Content comparison | Counts/measures | Result |
 |---|---|---|---|---|---|
-| March | Pending | Pending | Pending | Pending | Not run |
-| + April | Pending | Pending | Pending | Pending | Not run |
-| + May | Pending | Pending | Pending | Pending | Not run |
-| Repeat May | Pending | Pending | Pending | Pending | Not run |
-| Failure/revision/late/schema | Pending | Pending | Pending | Pending | Not run |
-| Fresh replay | Pending | Pending | Pending | Pending | Not run |
+| March | Logged in `ingestion_batches` | `green_taxi_2026-03_v1` | Schema drift check: clean | 44,208 rows, matches source count | Pass |
+| + April | Logged in `ingestion_batches` | `green_taxi_2026-04_v1` | Schema drift check across March+April: clean | 44,238 rows, matches source count | Pass |
+| + May | Logged in `ingestion_batches` | `green_taxi_2026-05_v1` | Schema drift check across all 3 months: clean | 44,921 rows, matches source count | Pass |
+| Repeat May | New run against same file, same batch skipped | Same content_sha256 as original May batch | Skipped — content hash matched an existing SUCCESS batch | 133,367 total rows unchanged, no duplicates (verified via `green_taxi_trip_validate_ingestion.sql`) | Pass |
+| Failure/revision/late/schema | Simulated failure batch marked FAILED; retry succeeded with new batch_id | N/A for failure test | N/A | Failed batch left no partial rows; retry produced correct row count | Partial — failure/retry tested; schema-breaking fixture not yet run |
+| Fresh replay | Not run | — | — | — | Not run |
