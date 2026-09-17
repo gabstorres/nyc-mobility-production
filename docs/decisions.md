@@ -36,6 +36,8 @@ This log explains why choices were made. Detailed implementation contracts live 
 | D11 | Full-refresh the selected Taxi Zone reference snapshot | Approved through Issue #22 | Identical input produces identical business content without incremental row-level complexity |
 | D12 | Approve three core business questions, defer optional traffic analysis, and use the two-fact Gold model | Final candidate for Issue #17 | Pickup and drop-off roles remain separate; trip and hourly-weather measurements remain at their natural grains |
 | D13 | Use numbered Databricks schemas aligned with pipeline stages | Approved through Issue #3 | Persisted objects use `01-control`, `02-bronze`, `03-silver`, `05-gold`, and `06-analytics` |
+| D14 | Build `ingestion_batches` as a standalone control table, scoped before Bronze ingestion; `pipeline_runs` deferred | Active | The pipeline can answer "have we already processed this?" from a persisted table without requiring per-layer run tracking yet |
+
 
 ## Foundational decisions
 
@@ -373,3 +375,62 @@ A dedicated `04-integration` schema requires a new decision if integration begin
 - Table and column names must not begin with digits.
 - The processing schemas are assumed to be dedicated to Group A. Revisit the namespace before implementation if another group must share them.
 - Gold table names are governed by D12 and the approved model documents.
+
+
+### D14: Ingestion batch tracking
+
+**Status:** Active
+**Decision date:** 2026-09-17
+
+Implement Issue #19 as the `ingestion_batches` control table only, per the
+approved name in `naming_conventions.md`. `pipeline_runs` (per-layer
+execution tracking) is deferred to a separate future issue.
+
+**Reason:** The issue's stated outcome — "the pipeline can answer 'have we
+already processed this?' from a persisted table" — is fully answerable by
+batch-level tracking alone. Per-layer run tracking (`pipeline_runs`) answers
+a narrower, separate question and is not required to satisfy this outcome.
+
+This work is scoped to sit before official Bronze ingestion (Issue #20). Data
+previously loaded into personal dev/sandbox schemas during earlier profiling
+and deduplication work (Issue #14) was exploratory and is not treated as
+official Bronze ingestion.
+
+**Table grain:** One row per external source batch or source version, per
+`naming_conventions.md`'s Control-table grains section.
+
+**Lifecycle:** `DISCOVERED` → `STARTED` → `SUCCESS` / `FAILED`. Status
+advances to `SUCCESS` only after the load lands and passes validation (for
+example, row-count reconciliation), not merely after the write technically
+succeeds. A failed batch does not block retry: a retry registers a new
+`batch_id` against the same file, preserving the failed attempt's history
+rather than overwriting it.
+
+**Two distinct hashing fields:**
+
+- `content_sha256`: hashes the batch's actual content, to detect whether it
+  changed independent of filename. For Green Taxi and Taxi Zones, this is a
+  whole-file hash.
+- `schema_fingerprint`: a separate hash of the column name-and-type
+  signature, to detect structural drift independently of content changes.
+  Not to be confused with `trip_hash` (D10, Issue #14), which is unrelated
+  row-level deduplication logic at the Silver layer.
+
+**`source_version_id`:** a human-readable label
+(`<source_system>_<source_period>_v1`), distinct from `content_sha256`. Only
+incremented by a person who has confirmed a genuine content change for an
+already-processed period, not auto-incremented.
+
+
+**Files:**
+
+- `etl/01_control/00_create_tables.sql`: table DDL
+- `src/ingestion/batch_tracking.py`: reusable register and mark-status
+  functions
+- `etl/01_control/90_validate.sql`: reusable validation queries (stuck
+  batches, retry-history integrity)
+
+**Consequence:** Any ingestion code for Green Taxi, weather, or Taxi Zones
+must call `register_batch_discovered`, `mark_batch_started`, and either
+`mark_batch_success` or `mark_batch_failed` from `batch_tracking.py` rather
+than writing ad hoc status tracking per source.
