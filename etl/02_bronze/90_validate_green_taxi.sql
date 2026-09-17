@@ -37,7 +37,7 @@ ORDER BY source_file;
 
 -- 3. Every Bronze row must carry complete provenance. A null in any of
 --    these means a row was written without going through the standard
---    ingestion path (e.g. inserted manually, bypassing batch_tracking.py).
+--    ingestion path (e.g. inserted manually, bypassing src/ingestion/common.py).
 SELECT
     COUNT(*) AS total_rows,
     SUM(CASE WHEN source_system IS NULL THEN 1 ELSE 0 END) AS null_source_system,

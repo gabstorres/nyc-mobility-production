@@ -1,33 +1,10 @@
+-- ============================================================
+-- 00 Control setup: operational tables in `01-control`.
+-- Safe to rerun.
+-- ============================================================
 
+-- One row per external source batch or source version (D14).
 CREATE TABLE IF NOT EXISTS `ftw-week-08`.`01-control`.ingestion_batches (
-    batch_id STRING NOT NULL,
-
-    -- what this batch is
-    source_system STRING,
-    source_object STRING,
-    source_period STRING,
-    request_parameters STRING,
-
-    -- identity / change detection
-    content_sha256 STRING,
-    source_version_id STRING,
-    schema_fingerprint STRING,
-
-    -- location
-    raw_uri STRING,
-
-    -- lifecycle
-    status STRING,
-    discovered_at TIMESTAMP,
-    started_at TIMESTAMP,
-    completed_at TIMESTAMP,
-
-    -- evidence
-    row_count BIGINT,
-    file_size BIGINT,
-    file_modified_time TIMESTAMP
-)
-USING DELTA;CREATE TABLE IF NOT EXISTS `ftw-week-08`.`01-control`.ingestion_batches (
     batch_id STRING NOT NULL,
 
     -- what this batch is
@@ -39,6 +16,7 @@ USING DELTA;CREATE TABLE IF NOT EXISTS `ftw-week-08`.`01-control`.ingestion_batc
     -- identity / change detection
     content_sha256 STRING,       -- proves whether content actually changed, not just the filename
     source_version_id STRING,
+    schema_fingerprint STRING,   -- hash of the column name+type signature
 
     -- location
     raw_uri STRING,              -- path in the source Volume
@@ -51,7 +29,6 @@ USING DELTA;CREATE TABLE IF NOT EXISTS `ftw-week-08`.`01-control`.ingestion_batc
 
     -- evidence
     row_count BIGINT,
-    schema_fingerprint STRING,
     file_size BIGINT,
     file_modified_time TIMESTAMP
 )
