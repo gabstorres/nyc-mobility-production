@@ -188,6 +188,33 @@ def test_schema_references_include_the_catalog(path):
 
 
 # ---------------------------------------------------------------------------
+# Whitespace
+# ---------------------------------------------------------------------------
+
+# Databricks markdown cells end a line with two spaces to force a line break,
+# so those lines are exempt. Everything else must not carry trailing blanks.
+MAGIC_PREFIXES = ("# MAGIC", "-- MAGIC")
+
+
+def trailing_whitespace_lines(text):
+    return [
+        number
+        for number, line in enumerate(text.splitlines(), 1)
+        if line != line.rstrip() and not line.lstrip().startswith(MAGIC_PREFIXES)
+    ]
+
+
+@pytest.mark.parametrize(
+    "path",
+    [p for p in files_with_suffix(".sql", ".py") if p.parts[0] in {"etl", "src", "tests"}],
+    ids=str,
+)
+def test_no_trailing_whitespace(path):
+    lines = trailing_whitespace_lines(read(path))
+    assert not lines, f"{path}: trailing whitespace on line(s) {lines}"
+
+
+# ---------------------------------------------------------------------------
 # Self-tests for the rules above
 # ---------------------------------------------------------------------------
 
@@ -196,6 +223,13 @@ def test_digit_table_rule_examples():
     assert digit_table_names("FROM `ftw-week-08`.`02-bronze`.`90_validate_x`") == {"90_validate_x"}
     assert digit_table_names("FROM `ftw-week-08`.`02-bronze`.green_taxi_raw") == set()
     assert digit_table_names("-- `02-bronze`.90_old_name in a comment") == set()
+
+
+def test_trailing_whitespace_rule_examples():
+    assert trailing_whitespace_lines("SELECT 1;   \nSELECT 2;\n") == [1]
+    assert trailing_whitespace_lines("# MAGIC **Source:** Open-Meteo  \n") == []
+    assert trailing_whitespace_lines("-- MAGIC | a | b |  \n") == []
+    assert trailing_whitespace_lines("SELECT 1;\n") == []
 
 
 def test_etl_file_name_rule_examples():
