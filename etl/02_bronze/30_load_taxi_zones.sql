@@ -28,5 +28,5 @@ FROM read_files(
     format => 'csv',
     header => true
 );
--- Because Taxi Zones is 265 rows, a refrence table and a static look up. 
+-- Because Taxi Zones is 265 rows, a refrence table and a static look up.
 -- We don't need incremental logic

@@ -30,10 +30,10 @@ HAVING COUNT(*) > 1;
 -- ==========================================
 
 SELECT
-    (SELECT COUNT(*) 
+    (SELECT COUNT(*)
      FROM `ftw-week-08`.`02-bronze`.taxi_zones_raw) AS bronze_count,
 
-    (SELECT COUNT(*) 
+    (SELECT COUNT(*)
      FROM `ftw-week-08`.`03-silver`.taxi_zones_clean) AS silver_count;
 
 -- Expected:

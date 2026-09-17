@@ -467,6 +467,7 @@ git diff --check
 - files under `etl/` follow `NN_lowercase_name.sql` or `.py` in a known layer folder
 - Python files under `etl/` are Databricks source-format notebooks
 - table names do not begin with a digit (the `90_` prefix is for file names only)
+- no trailing whitespace, except on Databricks markdown lines (`# MAGIC` / `-- MAGIC`), where two trailing spaces are a Markdown line break
 - schema references include the catalog
 
 Test files that are Databricks notebooks are skipped locally (see
