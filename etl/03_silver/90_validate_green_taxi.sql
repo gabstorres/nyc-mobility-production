@@ -92,19 +92,18 @@ measures AS (
 -- ------------------------------------------------------------
 schema_expected AS (
     SELECT * FROM VALUES
-        ('vendor_id', 0), ('pickup_datetime_local', 1), ('dropoff_datetime_local', 2),
-        ('trip_duration_seconds', 3), ('store_and_fwd_flag', 4), ('rate_code_id', 5),
-        ('pickup_location_id', 6), ('dropoff_location_id', 7), ('passenger_count', 8),
-        ('trip_distance_miles', 9), ('fare_amount_usd', 10), ('extra_amount_usd', 11),
-        ('mta_tax_amount_usd', 12), ('tip_amount_usd', 13), ('tolls_amount_usd', 14),
-        ('ehail_fee_amount_usd', 15), ('improvement_surcharge_amount_usd', 16),
-        ('total_amount_usd', 17), ('payment_type_id', 18), ('trip_type_id', 19),
-        ('congestion_surcharge_amount_usd', 20), ('cbd_congestion_fee_amount_usd', 21),
-        ('source_system', 22), ('source_file', 23), ('content_sha256', 24),
-        ('ingested_at', 25), ('batch_id', 26), ('silver_processed_at', 27),
-        ('negative_fare_flag', 28), ('negative_distance_flag', 29),
-        ('dropoff_before_pickup_flag', 30), ('implausible_duration_flag', 31),
-        ('implausible_passenger_count_flag', 32), ('passenger_count_missing_flag', 33)
+        ('trip_hash', 0), ('vendor_id', 1), ('pickup_datetime_local', 2),
+        ('dropoff_datetime_local', 3), ('trip_duration_seconds', 4), ('store_and_fwd_flag', 5),
+        ('rate_code_id', 6), ('pickup_location_id', 7), ('dropoff_location_id', 8),
+        ('passenger_count', 9), ('trip_distance_miles', 10), ('fare_amount_usd', 11),
+        ('extra_amount_usd', 12), ('mta_tax_amount_usd', 13), ('tip_amount_usd', 14),
+        ('tolls_amount_usd', 15), ('ehail_fee_amount_usd', 16), ('improvement_surcharge_amount_usd', 17),
+        ('total_amount_usd', 18), ('payment_type_id', 19), ('trip_type_id', 20),
+        ('congestion_surcharge_amount_usd', 21), ('cbd_congestion_fee_amount_usd', 22), ('source_system', 23),
+        ('source_file', 24), ('content_sha256', 25), ('ingested_at', 26),
+        ('batch_id', 27), ('silver_processed_at', 28), ('negative_fare_flag', 29),
+        ('negative_distance_flag', 30), ('dropoff_before_pickup_flag', 31), ('implausible_duration_flag', 32),
+        ('implausible_passenger_count_flag', 33), ('passenger_count_missing_flag', 34)
     AS expected(column_name, ordinal_position)
 ),
 
@@ -140,9 +139,41 @@ checks AS (
 
     UNION ALL
     SELECT 'silver_schema', 'SCHEMA', 'FAIL', 0.0,
-           CAST(fail_count AS BIGINT), 34,
+           CAST(fail_count AS BIGINT), 35,
            'Silver column names and order must match the expected signature.'
     FROM schema_mismatches
+
+    -- ---- published trip identity (D19) ----
+    --
+    -- trip_hash is now the key Integration hangs its maps on and Gold
+    -- carries as trip_key, so Silver has to prove it is a usable key
+    -- rather than leaving Gold to discover it isn't.
+
+    UNION ALL
+    SELECT 'trip_hash_not_null', 'NOT_NULL', 'FAIL', 0.0,
+           COUNT_IF(trip_hash IS NULL), COUNT(*),
+           'trip_hash is the published trip identity.'
+    FROM clean
+
+    UNION ALL
+    SELECT 'trip_hash_unique', 'UNIQUE', 'FAIL', 0.0,
+           COUNT(*) - COUNT(DISTINCT trip_hash), COUNT(*),
+           'Unique within the clean set by construction: collision groups go to quarantine. A duplicate here means the duplicate policy did not hold.'
+    FROM clean
+
+    UNION ALL
+    SELECT 'trip_hash_length', 'FORMAT', 'FAIL', 0.0,
+           COUNT_IF(LENGTH(trip_hash) <> 64), COUNT(*),
+           'sha2(..., 256) renders as 64 hex characters.'
+    FROM clean
+
+    UNION ALL
+    SELECT 'trip_hash_disjoint_from_quarantine', 'CONSISTENCY', 'FAIL', 0.0,
+           CAST((SELECT COUNT(*) FROM (
+                SELECT trip_hash FROM clean INTERSECT SELECT trip_hash FROM quarantine)) AS BIGINT),
+           GREATEST((SELECT COUNT(*) FROM quarantine), 1),
+           'No quarantined identity may also appear in the clean table.'
+    FROM (SELECT 1)
 
     -- ---- required fields ----
 

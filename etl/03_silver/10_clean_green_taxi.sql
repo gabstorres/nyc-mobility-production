@@ -111,8 +111,16 @@ FROM silver_typed;
 -- Step 3: split by DUPLICATE STATUS ONLY (per D10/D15).
 -- All quality flags above stay on green_taxi_clean regardless of value —
 -- they inform downstream measure eligibility, they don't exclude the row.
+--
+-- trip_hash is PUBLISHED, not dropped (D19). It is unique within the clean
+-- set by construction -- that is exactly what collision_count = 1 means --
+-- so it is the trip's identity for every downstream layer: Integration
+-- hangs its key maps on it and Gold carries it as trip_key. Dropping it
+-- used to force Gold to recompute a hash of its own over the TYPED
+-- columns, which is a different serialization over rounded values, so two
+-- definitions of one identity existed with nothing keeping them in step.
 CREATE OR REPLACE TABLE `ftw-week-08`.`03-silver`.green_taxi_clean AS
-SELECT * EXCEPT (trip_hash, collision_count)
+SELECT * EXCEPT (collision_count)
 FROM silver_decided
 WHERE collision_count = 1;
 
