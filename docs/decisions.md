@@ -2,7 +2,7 @@
 
 This document is the canonical record of important product, data, and engineering decisions for the NYC Mobility Pipeline. It records what was decided, why it was chosen, which alternatives were rejected, what assumptions remain, and what consequences follow.
 
-**Last updated:** 2026-09-17  
+**Last updated:** 2026-09-18
 **Decision priority:** correctness > reliability > maintainability > scalability > observability > efficiency
 
 ## Maintenance rule
@@ -40,6 +40,7 @@ This log explains why choices were made. Detailed implementation contracts live 
 | D15 | Retain quality-flagged Green Taxi rows in the clean Silver table instead of quarantining them; quarantine only duplicate collisions | Active | `green_taxi_clean` requires explicit flag filtering per measure; only D10 duplicates are excluded from it |
 | D16 | Standardize Taxi Zones in Silver and preserve sentinel records | Approved through Issue #29 | Taxi Zone IDs 264 and 265 remain explicit Silver members and location_id uniqueness is validated on every load |
 | D17 | Validate Bronze and Silver per source with a shared result contract; remove `etl/00_source_profile/` | Proposed | Each source has its own gate and may advance independently; Integration requires every source's Silver gate |
+| D18 | Build both Gold facts from validated upstream results with deterministic keys and convergent MERGE publication | Proposed through Issue #38 | Facts preserve their declared grains; Gold validation blocks publication on grain, FK, lineage, quarantine, or reconciliation failures |
 
 
 ## Foundational decisions
@@ -587,3 +588,39 @@ Classification logic is handled separately through zone_classification.
   must be revalidated once that gate passes.
 - `docs/naming_conventions.md` and `etl/README.md` now point to `etl/`, not
   `sql/`, and no longer list `00_source_profile/`.
+
+
+## Gold fact build decision
+
+### D18: Deterministic facts and a blocking Gold gate
+
+**Status:** Proposed through Issue #38
+**Decision date:** 2026-09-18
+
+**Decision:**
+
+1. `fact_weather_hourly` reuses Silver's deterministic observation key and
+   resolves Date, Hour, and Weather Classification keys only from built Gold
+   dimensions.
+2. `fact_taxi_trip` consumes the validated `integration_trip_weather` result.
+   It resolves role-playing dimension keys in Gold and copies only the matched
+   weather classification key; hourly temperature and precipitation remain on
+   the weather fact.
+3. `trip_key` is a deterministic hash of the approved D10 identity inputs and
+   excludes batch, run, and ingestion metadata.
+4. Both facts use `MERGE` on their deterministic keys. Because the current
+   Silver and Integration inputs are complete accepted snapshots, the delete
+   arm makes a revised contribution converge without leaving stale rows.
+5. Pre-write guards block join fan-out, duplicate trip keys, unresolved required
+   FKs, ambiguous weather matches, and non-unique source-version lineage.
+6. `90_validate_gold.sql` writes one row per check to the shared control table
+   and raises an error if any blocking check fails.
+
+**Known contract gap:** `requested_timezone` is specified in the data
+dictionary, but the request parameter is not persisted in Bronze or Silver.
+Gold does not fabricate it. It must be captured upstream before the column can
+be published and validated.
+
+**Consequence:** The files are implementation-ready but are not proof of a
+passing Gold layer until the Integration branch is merged and the Databricks
+proof run records counts, reconciled measures, and an identical-input rerun.

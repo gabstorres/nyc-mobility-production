@@ -71,6 +71,7 @@ This document defines every retained Gold field in the approved NYC Mobility Pip
 | `run_id` | STRING | No | Lineage | Pipeline execution-attempt identifier; distinct from `batch_id`. |
 | `ingested_at` | TIMESTAMP | No | Lineage | UTC operational ingestion timestamp. |
 | `source_row_locator` | STRING | Yes | Lineage | Stable audit locator where practical; not proof of real-world trip identity. |
+| `gold_processed_at` | TIMESTAMP | No | Lineage | UTC timestamp of the Gold build that last wrote the row. It may change on replay; business content does not. |
 
 ## `fact_weather_hourly`
 
@@ -101,8 +102,14 @@ This document defines every retained Gold field in the approved NYC Mobility Pip
 | `batch_id` | STRING | No | Lineage | External request or response batch identifier. |
 | `run_id` | STRING | No | Lineage | Pipeline execution-attempt identifier. |
 | `ingested_at` | TIMESTAMP | No | Lineage | UTC operational ingestion timestamp. |
+| `gold_processed_at` | TIMESTAMP | No | Lineage | UTC timestamp of the Gold build that last wrote the row. It may change on replay; business content does not. |
 
 The natural uniqueness constraint is (`coordinate_id`, `observation_timestamp_utc`, `weather_model`).
+
+`requested_timezone` remains a contract gap: the approved value is UTC, but
+neither Bronze nor Silver currently persists the request parameter. Gold does
+not fabricate the field; capture it upstream before making it a published
+column.
 
 ## `dim_taxi_zone`
 
