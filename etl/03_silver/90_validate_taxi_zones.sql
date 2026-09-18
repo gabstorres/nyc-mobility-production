@@ -104,3 +104,55 @@ ORDER BY zone_classification;
 -- ewr
 -- unknown
 -- outside_nyc
+
+-- ==========================================
+-- Check 8: Source metadata must not be NULL
+-- ==========================================
+
+SELECT *
+FROM `ftw-week-08`.`03-silver`.taxi_zones_clean
+WHERE source_system IS NULL
+   OR source_file IS NULL
+   OR source_file_version IS NULL
+   OR batch_id IS NULL
+   OR ingested_at IS NULL;
+
+-- Expected: 0 rows
+
+
+-- ==========================================
+-- Check 9: source_system uses approved value
+-- ==========================================
+
+SELECT DISTINCT source_system
+FROM `ftw-week-08`.`03-silver`.taxi_zones_clean;
+
+-- Expected:
+-- nyc_tlc_taxi_zones
+
+
+-- ==========================================
+-- Check 10: source_file_version populated
+-- ==========================================
+
+SELECT DISTINCT source_file_version
+FROM `ftw-week-08`.`03-silver`.taxi_zones_clean;
+
+-- Expected:
+-- snapshot_v1
+-- (or approved source version value)
+
+
+-- ==========================================
+-- Check 11: Borough values match Bronze source
+-- ==========================================
+
+SELECT
+    COUNT(*) AS borough_value_mismatch
+FROM `ftw-week-08`.`03-silver`.taxi_zones_clean s
+WHERE s.borough NOT IN (
+    SELECT DISTINCT borough
+    FROM `ftw-week-08`.`02-bronze`.taxi_zones_raw
+);
+
+-- Expected: 0
