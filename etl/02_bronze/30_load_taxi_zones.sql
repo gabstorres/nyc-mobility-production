@@ -95,6 +95,15 @@ SET VARIABLE zones_is_new = (
             AND content_sha256 = zones_content_sha256
             AND status = 'SUCCESS') = 0
      OR (SELECT COUNT(*) FROM `ftw-week-08`.`02-bronze`.taxi_zones_raw) = 0
+     -- Rows whose batch_id is no longer a live SUCCESS batch. The snapshot
+     -- content never changes, so without this the rows keep the batch_id they
+     -- were first inserted under while later runs register and demote batches
+     -- around them, and batch_registered_in_control fails on every row.
+     OR (SELECT COUNT(*)
+         FROM `ftw-week-08`.`02-bronze`.taxi_zones_raw t
+         WHERE NOT EXISTS (
+             SELECT 1 FROM `ftw-week-08`.`01-control`.ingestion_batches b
+             WHERE b.batch_id = t.batch_id AND b.status = 'SUCCESS')) > 0
 );
 
 
@@ -166,10 +175,17 @@ USING (
 ) AS source
 ON target.location_id = source.location_id
 
+-- Business content OR lineage. Comparing business values alone meant a newly
+-- registered batch never reached the rows, because a reference snapshot's
+-- content is identical every run.
 WHEN MATCHED AND NOT (
-         target.borough      <=> source.borough
-     AND target.zone         <=> source.zone
-     AND target.service_zone <=> source.service_zone
+         target.borough             <=> source.borough
+     AND target.zone                <=> source.zone
+     AND target.service_zone        <=> source.service_zone
+     AND target.source_system       <=> source.source_system
+     AND target.source_file_version <=> source.source_file_version
+     AND target.content_sha256      <=> source.content_sha256
+     AND target.batch_id            <=> source.batch_id
 ) THEN UPDATE SET
     borough             = source.borough,
     zone                = source.zone,

@@ -168,6 +168,12 @@ SET VARIABLE weather_is_new = (
          WHERE NOT (t.source_response_version <=> s.source_response_version)
             OR NOT (t.source_system           <=> s.source_system)
             OR NOT (t.source_url              <=> s.source_url)) > 0
+     -- Rows pointing at a batch that is no longer a live SUCCESS.
+     OR (SELECT COUNT(*)
+         FROM `ftw-week-08`.`02-bronze`.open_meteo_weather_raw t
+         WHERE NOT EXISTS (
+             SELECT 1 FROM `ftw-week-08`.`01-control`.ingestion_batches b
+             WHERE b.batch_id = t.batch_id AND b.status = 'SUCCESS')) > 0
 );
 
 
