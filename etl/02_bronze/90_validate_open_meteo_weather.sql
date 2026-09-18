@@ -74,20 +74,41 @@ WITH bronze AS (
     SELECT * FROM `ftw-week-08`.`02-bronze`.open_meteo_weather_raw
 ),
 
+-- Types confirmed from the first run's bronze_column_types_observed
+-- measurement: information_schema renders the four complex columns as
+-- plain ARRAY, not ARRAY<STRING>.
 schema_expected AS (
     SELECT * FROM VALUES
-        ('coordinate_id', 0), ('requested_latitude', 1), ('requested_longitude', 2),
-        ('requested_start_date', 3), ('requested_end_date', 4), ('weather_model', 5),
-        ('returned_latitude', 6), ('returned_longitude', 7), ('elevation_m', 8),
-        ('utc_offset_seconds', 9), ('timezone', 10), ('timezone_abbreviation', 11),
-        ('generationtime_ms', 12), ('hourly_time', 13), ('hourly_temperature_2m', 14),
-        ('hourly_precipitation', 15), ('hourly_weather_code', 16),
-        ('hourly_units_time', 17), ('hourly_units_temperature_2m', 18),
-        ('hourly_units_precipitation', 19), ('hourly_units_weather_code', 20),
-        ('source_system', 21), ('source_url', 22), ('source_file', 23),
-        ('content_sha256', 24), ('source_response_version', 25),
-        ('run_id', 26), ('batch_id', 27), ('ingested_at', 28)
-    AS expected(column_name, ordinal_position)
+        ('coordinate_id',               'STRING',    0),
+        ('requested_latitude',          'DOUBLE',    1),
+        ('requested_longitude',         'DOUBLE',    2),
+        ('requested_start_date',        'STRING',    3),
+        ('requested_end_date',          'STRING',    4),
+        ('weather_model',               'STRING',    5),
+        ('returned_latitude',           'DOUBLE',    6),
+        ('returned_longitude',          'DOUBLE',    7),
+        ('elevation_m',                 'DOUBLE',    8),
+        ('utc_offset_seconds',          'INT',       9),
+        ('timezone',                    'STRING',   10),
+        ('timezone_abbreviation',       'STRING',   11),
+        ('generationtime_ms',           'DOUBLE',   12),
+        ('hourly_time',                 'ARRAY',    13),
+        ('hourly_temperature_2m',       'ARRAY',    14),
+        ('hourly_precipitation',        'ARRAY',    15),
+        ('hourly_weather_code',         'ARRAY',    16),
+        ('hourly_units_time',           'STRING',   17),
+        ('hourly_units_temperature_2m', 'STRING',   18),
+        ('hourly_units_precipitation',  'STRING',   19),
+        ('hourly_units_weather_code',   'STRING',   20),
+        ('source_system',               'STRING',   21),
+        ('source_url',                  'STRING',   22),
+        ('source_file',                 'STRING',   23),
+        ('content_sha256',              'STRING',   24),
+        ('source_response_version',     'STRING',   25),
+        ('run_id',                      'STRING',   26),
+        ('batch_id',                    'STRING',   27),
+        ('ingested_at',                 'TIMESTAMP', 28)
+    AS expected(column_name, data_type, ordinal_position)
 ),
 
 schema_actual AS (
@@ -98,10 +119,7 @@ schema_actual AS (
       AND table_name    = 'open_meteo_weather_raw'
 ),
 
--- Names and positions only. The other two gates also compare data_type,
--- but this table has four ARRAY columns and how information_schema
--- renders a complex type is not something to guess at -- the INFO check
--- below reports the actual strings so types can be added next run.
+-- Name, type and position, matching the other two Bronze gates.
 schema_mismatches AS (
     SELECT COUNT(*) AS fail_count
     FROM (
@@ -109,6 +127,7 @@ schema_mismatches AS (
         FROM schema_expected expected
         FULL OUTER JOIN schema_actual actual
           ON expected.column_name      = actual.column_name
+         AND expected.data_type        = actual.data_type
          AND expected.ordinal_position = actual.ordinal_position
         WHERE expected.column_name IS NULL OR actual.column_name IS NULL
     )
@@ -366,6 +385,21 @@ checks AS (
            CAST(timestamp_gaps AS BIGINT), total_count,
            'Hourly observations must be continuous at one-hour intervals (UTC, so no DST gaps).'
     FROM obs_profile
+
+    -- Units confirmed from the first run's hourly_units_observed
+    -- measurement. This is the check that catches Open-Meteo switching to
+    -- Fahrenheit or inches: temperature_range only notices a units change
+    -- once a value leaves the -50..60 window, and most of the year it
+    -- would not. A change here invalidates every stored measure.
+    UNION ALL
+    SELECT 'hourly_units_expected', 'DOMAIN', 'FAIL', 0.0,
+           SUM(CASE WHEN hourly_units_time           <> 'iso8601'
+                      OR hourly_units_temperature_2m <> '°C'
+                      OR hourly_units_precipitation  <> 'mm'
+                      OR hourly_units_weather_code   <> 'wmo code'
+                    THEN 1 ELSE 0 END), COUNT(*),
+           'Landed units must match those the stored measures were validated against.'
+    FROM bronze
 
     -- ---- measurements ----
 
