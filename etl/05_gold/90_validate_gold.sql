@@ -13,28 +13,10 @@ SET VARIABLE dq_run_id = uuid();
 DECLARE OR REPLACE VARIABLE gold_code_revision STRING;
 SET VARIABLE gold_code_revision = 'not_provided';
 
-CREATE TABLE IF NOT EXISTS `ftw-week-08`.`01-control`.data_quality_results (
-    run_id STRING,
-    executed_at TIMESTAMP,
-    layer STRING,
-    dataset STRING,
-    batch_id STRING,
-    source_version_id STRING,
-    code_revision STRING,
-    check_name STRING,
-    check_type STRING,
-    status STRING,
-    severity STRING,
-    fail_count BIGINT,
-    total_count BIGINT,
-    fail_pct DOUBLE,
-    threshold_pct DOUBLE,
-    metric_value DOUBLE,
-    owner STRING,
-    details STRING,
-    evidence_location STRING
-)
-USING DELTA;
+-- The results table is created once in etl/01_control/00_create_control_tables.sql.
+-- This file used to declare its own copy, which diverged: it carried an extra
+-- metric_value column, and because CREATE TABLE IF NOT EXISTS is a no-op the
+-- declaration never applied while the INSERT below still named that column.
 
 CREATE OR REPLACE TEMP VIEW gold_validation_context AS
 WITH batch_ids AS (
@@ -425,21 +407,11 @@ SELECT
     0.0, 'FAIL', NULL,
     'No Silver duplicate-collision row may appear in Gold.'
 FROM `ftw-week-08`.`03-silver`.green_taxi_quarantine AS q
+-- Joined on the identity Silver publishes (D19). This used to recompute a
+-- hash of the typed columns here, a second copy of a formula that had to be
+-- kept in step with the fact build by hand.
 INNER JOIN `ftw-week-08`.`05-gold`.fact_taxi_trip AS f
-    ON f.trip_key = sha2(
-        to_json(
-            named_struct(
-                'vendor_id', q.vendor_id,
-                'pickup_datetime_local', q.pickup_datetime_local,
-                'dropoff_datetime_local', q.dropoff_datetime_local,
-                'pickup_location_id', q.pickup_location_id,
-                'dropoff_location_id', q.dropoff_location_id,
-                'trip_distance_miles', q.trip_distance_miles,
-                'fare_amount_usd', q.fare_amount_usd
-            )
-        ),
-        256
-    )
+    ON f.trip_key = q.trip_hash
 
 -- ------------------------------------------------------------
 -- Lineage and Silver-to-Gold reconciliation
@@ -561,7 +533,6 @@ INSERT INTO `ftw-week-08`.`01-control`.data_quality_results (
     total_count,
     fail_pct,
     threshold_pct,
-    metric_value,
     owner,
     details,
     evidence_location
@@ -593,7 +564,6 @@ SELECT
         ELSE checks.fail_count * 100.0 / checks.total_count
     END AS fail_pct,
     checks.threshold_pct,
-    checks.metric_value,
     'ina' AS owner,
     checks.details,
     'etl/05_gold/90_validate_gold.sql' AS evidence_location
