@@ -2,7 +2,7 @@
 
 This document is the canonical record of important product, data, and engineering decisions for the NYC Mobility Pipeline. It records what was decided, why it was chosen, which alternatives were rejected, what assumptions remain, and what consequences follow.
 
-**Last updated:** 2026-09-18
+**Last updated:** 2026-09-19
 **Decision priority:** correctness > reliability > maintainability > scalability > observability > efficiency
 
 ## Maintenance rule
@@ -43,6 +43,10 @@ This log explains why choices were made. Detailed implementation contracts live 
 | D18 | Build both Gold facts from validated upstream results with deterministic keys and convergent MERGE publication | Proposed through Issue #38 | Facts preserve their declared grains; Gold validation blocks publication on grain, FK, lineage, quarantine, or reconciliation failures |
 | D19 | Publish Silver's `trip_hash` as the trip identity and carry it into Gold as `trip_key` | Approved | One definition of trip identity; Integration keys its maps on it and Gold stops recomputing a second hash |
 | D20 | Accept the weather coverage gap and report weather measures against their own denominator | Approved | Q2 and Q3 describe 133,173 of 133,353 trips; the shortfall is concentrated on the evening of 2026-05-31 |
+| D21 | Treat `passenger_count = 0` as not recorded rather than implausible | Approved | Passenger measures must exclude `passenger_count_missing_flag` rows and state their denominator |
+| D22 | Rebuild every layer above Bronze in full; keep incremental processing at Bronze | Approved | Late-arriving rows and global duplicate detection stay correct without watermark state below Bronze |
+| D23 | Store wall-clock business timestamps as `TIMESTAMP_NTZ` and convert with `convert_timezone` | Approved | No stored timestamp depends on the cluster's session timezone |
+| D24 | Add a `SUPERSEDED` batch status for content that was later reloaded | Approved | A reload no longer reads as double processing, and the earlier attempt stays auditable |
 
 
 ## Foundational decisions
@@ -671,3 +675,202 @@ Integration and Gold.
   excluded trips stay identifiable rather than silently absent.
 - 11 of the 180 can never be covered by any request for this period; they are
   permanently out of scope for Q2 and Q3.
+
+### D19: Publish Silver's `trip_hash` as the trip identity
+
+**Status:** Approved
+**Decision date:** 2026-09-18
+
+**Decision:**
+
+`green_taxi_clean` publishes `trip_hash` instead of dropping it. Integration keys
+its maps on it, and Gold carries it as `fact_taxi_trip.trip_key` rather than
+computing a hash of its own.
+
+**Reason:**
+
+The hash is unique within the clean set by construction: that is exactly what
+`collision_count = 1` means under D10. Dropping it left Silver with no key, so
+Gold recomputed one over the **typed** Silver columns while Silver had hashed the
+**raw** Bronze values. Two serializations of one identity existed, over values of
+different precision, with nothing keeping them in step. Integration also had
+nothing to hang a key map on, which is why stage 04 had no workable shape.
+
+**Rejected alternatives:**
+
+- Keep recomputing in Gold: two definitions that agree today only because the
+  source carries at most two decimal places. A future month with three would let
+  two rows distinct in Silver round into one `trip_key`, breaking the fact's
+  primary key in a way the Silver gate structurally cannot see.
+- Join Integration maps on the seven identity columns instead of a key: works,
+  but puts a seven-column join in every downstream query.
+
+**Assumptions:**
+
+- The D10 collision policy continues to quarantine whole groups, which is what
+  makes the hash unique in the clean set.
+
+**Consequences:**
+
+- Every `trip_key` value changed; `fact_taxi_trip` had to be rebuilt.
+- The Silver gate proves the key is usable: non-null, unique, 64 characters, and
+  disjoint from the quarantine table.
+
+### D21: `passenger_count = 0` means not recorded, not implausible
+
+**Status:** Approved
+**Decision date:** 2026-09-18
+
+**Decision:**
+
+`passenger_count = 0` sets `passenger_count_missing_flag`, alongside null. It does
+not set `implausible_passenger_count_flag`, which stays for counts below zero or
+above eight.
+
+**Reason:**
+
+Profiling the three source files shows it is a vendor reporting convention rather
+than a data error:
+
+| VendorID | Trips | `= 0` | NULL | % zero |
+|---:|---:|---:|---:|---:|
+| 2 | 108,531 | 205 | 4,396 | 0.19% |
+| 6 | 14,181 | 0 | 14,181 | 0% |
+| 1 | 10,655 | 1,522 | 177 | 14.28% |
+
+Vendor 6 reports null for every one of its trips; vendor 1 writes `0` on 14.28% of
+its. The trips themselves are ordinary: median fare $14.90 against $14.20 for
+trips with a recorded count, median distance 1.7 miles against 1.9.
+
+**Rejected alternative:**
+
+Flagging zero as implausible. The trip is not implausible; only the passenger
+count is unknown, and the two statements belong in different columns.
+
+**Consequences:**
+
+- 20,481 rows carry `passenger_count_missing_flag`, 15.35% of the clean table.
+- **Any passenger measure in Gold or Analytics must exclude those rows and state
+  its denominator.** Leaving zero unflagged would average the zeros in while
+  dropping the nulls, biasing every passenger average low.
+- None of the three approved business questions currently uses passenger count,
+  so nothing downstream depends on this yet.
+
+### D22: Full deterministic rebuild above Bronze
+
+**Status:** Approved
+**Decision date:** 2026-09-19
+
+**Decision:**
+
+Bronze is the only incremental layer. Silver, Integration, Gold and Analytics are
+rebuilt in full from the layer below on every run. No watermark, processed-batch
+marker or row-level merge state exists below Bronze.
+
+**Reason:**
+
+1. **Late-arriving rows are real and cross-month.** Counted on the three source
+   files: the May file carries 8 pickups dated April 2026 and 2 dated December
+   2008; the April file carries 1 dated March and 2 dated May. Rebuilding only the
+   arriving month, or advancing a watermark on pickup date, leaves April wrong by
+   eight trips and reports success.
+2. **The duplicate rule is global by construction.** `collision_count` partitions
+   over the whole trip population. An incremental Silver would have to detect
+   collisions between an arriving batch and already-published rows, then
+   retroactively move a clean row into quarantine. Verified: all 7 collision
+   groups fall inside a single source file, so that machinery would cover a case
+   that does not occur.
+3. **Volume does not justify it.** 133,367 rows over three months.
+4. **It makes the idempotency proof simpler**: rerunning reduces to Bronze
+   skipping on content hash plus every layer above being a function of Bronze.
+
+**Rejected alternatives:**
+
+- Batch-scoped append into Silver: breaks D10, since duplicate detection would see
+  one batch at a time.
+- Partition-scoped rebuild of Gold by pickup month: correct only if the affected
+  partitions come from the arriving batch's actual pickup dates rather than the
+  file's month, which the table above shows differ. Recorded as the upgrade path.
+
+**Assumptions:**
+
+- Monthly volume stays near 50,000 rows. Revisit past roughly 2 million rows in
+  Silver, or a rebuild over ten minutes.
+- Cross-batch hash collisions remain absent. This is a property of the data, not a
+  guarantee, so the Silver gate counts collision groups every run rather than
+  assuming zero.
+
+### D23: Wall-clock business timestamps are `TIMESTAMP_NTZ`
+
+**Status:** Approved
+**Decision date:** 2026-09-19
+
+**Decision:**
+
+Business timestamps that represent a wall-clock reading are stored as
+`TIMESTAMP_NTZ` in Silver, Integration and Gold. Timezone conversion uses
+`convert_timezone(from, to, ts)` with both ends named. `to_timestamp`,
+`from_utc_timestamp`, `to_utc_timestamp` and `unix_timestamp` are not used on
+these columns. Operational timestamps (`ingested_at`, `silver_processed_at`,
+`executed_at`) remain `TIMESTAMP`, since they record an instant.
+
+**Reason:**
+
+Those functions resolve a zoneless value through the **session** timezone, so the
+same input produced different stored data depending on a cluster setting nobody
+had written down. Three cases were found:
+
+- Open-Meteo sends a zoneless ISO8601 string. `to_timestamp` then
+  `from_utc_timestamp` was correct on a UTC cluster and silently cancelled itself
+  out on an `America/New_York` one: `2026-03-01T00:00Z` became midnight on 1 March
+  instead of 19:00 on 28 February.
+- `unix_timestamp` differences for trip duration were wrong across the 8 March DST
+  transition on a New York cluster.
+- A plain `TIMESTAMP` column in Gold would have converted Silver's values on
+  insert, undoing the fix one layer down.
+
+**Rejected alternative:**
+
+Pinning the cluster's session timezone. That makes correctness depend on
+configuration outside the repository, which no gate can check.
+
+**Consequences:**
+
+- The Silver weather gate asserts every interior local day holds 23 to 25 distinct
+  hours, which detects a conversion that is not shifting at all.
+- Boundary days are excluded from that check: a UTC request window cuts the first
+  and last local days short by construction.
+
+### D24: `SUPERSEDED` batch status
+
+**Status:** Approved
+**Decision date:** 2026-09-19
+
+**Decision:**
+
+`ingestion_batches.status` gains `SUPERSEDED`. A loader demotes a prior `SUCCESS`
+batch to it before registering a replacement for the same content.
+
+**Reason:**
+
+Reloading content that already succeeded, usually because its Bronze table was
+dropped, left two `SUCCESS` rows for one content hash. The control gate reads that
+as the same bytes processed twice, which is exactly what it should flag. Deleting
+the earlier row would hide a real attempt, so it is demoted instead and keeps its
+own `batch_id`, `row_count` and timestamps.
+
+**Rejected alternatives:**
+
+- Deleting the earlier batch: destroys the audit trail the control table exists for.
+- Exempting reloads from the duplicate check: removes the only check that answers
+  "what prevents this batch being processed twice?".
+
+**Consequences:**
+
+- The demotion is guarded by the same condition that decides whether a replacement
+  is registered, so the two cannot disagree.
+- `source_systems_registering_batches` counts only `SUCCESS`, so coverage
+  reporting is unaffected.
+- `supersedes_batch_id` exists on the table but is **not yet populated**; the link
+  between a batch and the one it replaces is currently inferable only from
+  `content_sha256` and timestamps.
