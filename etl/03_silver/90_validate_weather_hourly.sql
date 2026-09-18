@@ -220,7 +220,7 @@ key_checks AS (
     SELECT
         'business_key_unique' AS check_name,
         COUNT(*) AS fail_count,
-        (SELECT COUNT(*) 
+        (SELECT COUNT(*)
          FROM `ftw-week-08`.`03-silver`.weather_hourly) AS total_count
     FROM duplicate_groups
 
