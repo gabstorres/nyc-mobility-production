@@ -10,7 +10,9 @@ CREATE TABLE IF NOT EXISTS `ftw-week-08`.`03-silver`.taxi_zones_clean (
 
     zone_classification STRING,
 
+    source_system STRING,
     source_file STRING,
+    source_file_version STRING,
     batch_id STRING,
     ingested_at TIMESTAMP,
 
@@ -21,40 +23,46 @@ MERGE INTO `ftw-week-08`.`03-silver`.taxi_zones_clean AS target
 
 USING (
 
-    SELECT
+   SELECT
 
-        CAST(location_id AS INT) AS location_id,
+    CAST(location_id AS INT) AS location_id,
 
-        trim(borough) AS borough,
+    trim(borough) AS borough,
 
-        trim(zone) AS zone_name,
+    trim(zone) AS zone_name,
 
-        CASE
-            WHEN service_zone = 'N/A' THEN 'na'
-            ELSE lower(trim(service_zone))
-        END AS service_zone,
+    CASE
+        WHEN service_zone = 'N/A' THEN 'na'
+        ELSE lower(trim(service_zone))
+    END AS service_zone,
 
-        CASE
-            WHEN location_id = 264 THEN 'unknown'
-            WHEN location_id = 265 THEN 'outside_nyc'
-            WHEN borough = 'EWR' THEN 'ewr'
-            WHEN borough IN (
-                'Bronx',
-                'Brooklyn',
-                'Manhattan',
-                'Queens',
-                'Staten Island'
-            ) THEN 'nyc_borough'
-            ELSE 'other_special'
-        END AS zone_classification,
+    CASE
+        WHEN location_id = 264 THEN 'unknown'
+        WHEN location_id = 265 THEN 'outside_nyc'
+        WHEN borough = 'EWR' THEN 'ewr'
+        WHEN borough IN (
+            'Bronx',
+            'Brooklyn',
+            'Manhattan',
+            'Queens',
+            'Staten Island'
+        ) THEN 'nyc_borough'
+        ELSE 'other_special'
+    END AS zone_classification,
 
-        source_file,
-        batch_id,
-        ingested_at,
+    'nyc_tlc_taxi_zones' AS source_system,
 
-        current_timestamp() AS silver_processed_at
+    source_file,
 
-    FROM `ftw-week-08`.`02-bronze`.taxi_zones_raw
+    source_file_version,
+
+    batch_id,
+
+    ingested_at,
+
+    current_timestamp() AS silver_processed_at
+
+FROM `ftw-week-08`.`02-bronze`.taxi_zones_raw
 
 ) AS source
 
@@ -70,12 +78,13 @@ WHEN NOT MATCHED THEN INSERT (
 
     zone_classification,
 
+    source_system,
     source_file,
+    source_file_version,
     batch_id,
     ingested_at,
 
     silver_processed_at
-
 )
 
 VALUES (
@@ -88,10 +97,11 @@ VALUES (
 
     source.zone_classification,
 
+    source.source_system,
     source.source_file,
+    source.source_file_version,
     source.batch_id,
     source.ingested_at,
 
     source.silver_processed_at
-
 );

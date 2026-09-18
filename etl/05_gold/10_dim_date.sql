@@ -1,63 +1,77 @@
--- Gold dimension: dim_date (issue #36). Calendar seed dimension -- one row
--- per local calendar date. Full rebuild (CREATE OR REPLACE), not an
--- incremental MERGE: a calendar has no revision history to preserve, so a
--- deterministic full recompute keeps this idempotent on rerun, matching
--- green_taxi_clean's own CREATE OR REPLACE precedent.
+-- Gold dimension: dim_date (issue #36). Calendar seed dimension.
 --
--- Grain: one row per unique local (America/New_York) calendar date.
--- SCD: Type 0 / full rebuild -- no history retained, none needed.
+-- Grain: one row per NYC-local calendar date.
 --
--- Date range is derived from actual Silver data (taxi pickup/drop-off local
--- dates + weather observation local dates) rather than a hardcoded literal
--- window, per source_to_target_mapping.md's requirement that dim_date cover
--- "the reporting interval and every retained observed taxi date." This also
--- means dim_date grows/shrinks automatically as more Silver data lands, with
--- no manual date-range maintenance.
+-- SCD: Type 0 / full rebuild.
+--
+-- Deterministic rebuild per D12 and data_model.md.
+-- The dimension must cover:
+--   1. The approved reporting window (2026-03-01 through 2026-05-31)
+--   2. Every retained observed trip date
+--
+-- The approved reporting window is seeded explicitly so the dimension
+-- remains valid even if Silver data is incomplete or temporarily empty.
+--
+-- No unknown member is created (D12).
+
 CREATE OR REPLACE TABLE `ftw-week-08`.`05-gold`.dim_date AS
-WITH date_bounds AS (
-    SELECT MIN(d) AS min_date, MAX(d) AS max_date
-    FROM (
-        SELECT CAST(pickup_datetime_local AS DATE) AS d
-        FROM `ftw-week-08`.`03-silver`.green_taxi_clean
-        WHERE pickup_datetime_local IS NOT NULL
 
-        UNION ALL
+WITH date_candidates AS (
 
-        SELECT CAST(dropoff_datetime_local AS DATE) AS d
-        FROM `ftw-week-08`.`03-silver`.green_taxi_clean
-        WHERE dropoff_datetime_local IS NOT NULL
+    -- Required reporting window boundaries
+    SELECT DATE '2026-03-01' AS full_date
 
-        UNION ALL
+    UNION ALL
 
-        SELECT observation_date_local AS d
-        FROM `ftw-week-08`.`03-silver`.weather_hourly
-        WHERE observation_date_local IS NOT NULL
-    )
+    SELECT DATE '2026-05-31' AS full_date
+
+    UNION ALL
+
+    SELECT CAST(pickup_datetime_local AS DATE) AS full_date
+    FROM `ftw-week-08`.`03-silver`.green_taxi_clean
+    WHERE pickup_datetime_local IS NOT NULL
+
+    UNION ALL
+
+    SELECT CAST(dropoff_datetime_local AS DATE) AS full_date
+    FROM `ftw-week-08`.`03-silver`.green_taxi_clean
+    WHERE dropoff_datetime_local IS NOT NULL
 ),
+
+date_bounds AS (
+    SELECT
+        MIN(full_date) AS min_date,
+        MAX(full_date) AS max_date
+    FROM date_candidates
+),
+
 calendar_seed AS (
-    -- One row per calendar day, inclusive, with zero gaps by construction.
-    SELECT explode(sequence(db.min_date, db.max_date, interval 1 day)) AS full_date
-    FROM date_bounds db
+    SELECT EXPLODE(
+        SEQUENCE(
+            min_date,
+            max_date,
+            INTERVAL 1 DAY
+        )
+    ) AS full_date
+    FROM date_bounds
 ),
+
 calendar_enriched AS (
-    -- weekday(): 0 = Monday ... 6 = Sunday. +1 gives ISO numbering (Monday=1
-    -- ... Sunday=7), computed once here so weekend_flag below reuses it
-    -- instead of a second date-math expression that could drift out of sync.
     SELECT
         full_date,
-        weekday(full_date) + 1 AS day_of_week_number
+        WEEKDAY(full_date) + 1 AS day_of_week_number
     FROM calendar_seed
 )
+
 SELECT
+    CAST(DATE_FORMAT(full_date, 'yyyyMMdd') AS INT) AS date_key,
     full_date,
-    CAST(date_format(full_date, 'yyyyMMdd') AS INT) AS date_key,
-    YEAR(full_date)    AS calendar_year,
+    YEAR(full_date) AS calendar_year,
     QUARTER(full_date) AS calendar_quarter,
-    MONTH(full_date)   AS month_number,
-    date_format(full_date, 'MMMM') AS month_name,
-    DAY(full_date)     AS day_of_month,
+    MONTH(full_date) AS month_number,
+    DATE_FORMAT(full_date, 'MMMM') AS month_name,
+    DAY(full_date) AS day_of_month,
     day_of_week_number,
-    date_format(full_date, 'EEEE') AS day_of_week_name,
+    DATE_FORMAT(full_date, 'EEEE') AS day_of_week_name,
     day_of_week_number IN (6, 7) AS weekend_flag
 FROM calendar_enriched;
-
