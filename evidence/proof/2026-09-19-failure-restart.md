@@ -31,6 +31,7 @@ Task `90_validate_taxi_zones` failed after 25s:
 [USER_RAISED_EXCEPTION] Bronze taxi_zones gate BLOCKED: 1 failed checks
 SQLSTATE: P0001
 ```
+<img width="1191" height="379" alt="image" src="https://github.com/user-attachments/assets/104b5408-4b68-4cb6-bd07-2390cd4b1090" />
 
 **This was a gate refusing to publish, not a crash.** `raise_error` is how a
 validation file fails its task, so the failure is the pipeline working as
