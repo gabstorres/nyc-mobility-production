@@ -120,3 +120,55 @@ RETURN
              AND COALESCE(fail_pct, 0) > COALESCE(threshold_pct, 0) THEN 'FAIL'
         ELSE 'WARN'
     END;
+
+-- ------------------------------------------------------------
+-- One row per gate, summarising its MOST RECENT run.
+--
+-- Answers two questions that would otherwise be retyped in every file:
+-- "what is the state of the pipeline?" and, for a stage about to run,
+-- "did the gates I depend on pass?" (docs/validation.md, gate dependencies).
+--
+-- ROW_NUMBER rather than DENSE_RANK here on purpose: this must return
+-- exactly one row per gate, so two runs sharing a timestamp need a
+-- deterministic tie-break rather than both being returned. run_id breaks
+-- the tie; it is arbitrary but stable.
+--
+-- A gate that has never run does not appear. Callers must treat a missing
+-- row as "not passed" rather than as "no failures" -- see the dependency
+-- assertion documented in docs/validation.md.
+-- ------------------------------------------------------------
+CREATE OR REPLACE VIEW `ftw-week-08`.`01-control`.gate_status AS
+WITH ranked AS (
+    SELECT
+        layer,
+        dataset,
+        run_id,
+        executed_at,
+        ROW_NUMBER() OVER (
+            PARTITION BY layer, dataset
+            ORDER BY executed_at DESC, run_id DESC
+        ) AS recency
+    FROM (
+        SELECT DISTINCT layer, dataset, run_id, executed_at
+        FROM `ftw-week-08`.`01-control`.data_quality_results
+    )
+),
+latest AS (
+    SELECT layer, dataset, run_id, executed_at FROM ranked WHERE recency = 1
+)
+SELECT
+    l.layer,
+    l.dataset,
+    CASE WHEN COUNT_IF(r.status = 'FAIL') > 0 THEN 'FAIL' ELSE 'PASS' END AS status,
+    COUNT(*)                        AS checks_run,
+    COUNT_IF(r.status = 'FAIL')     AS fail_count,
+    COUNT_IF(r.status = 'WARN')     AS warn_count,
+    COUNT_IF(r.status = 'PASS')     AS pass_count,
+    COUNT_IF(r.status = 'INFO')     AS info_count,
+    l.executed_at,
+    l.run_id,
+    MAX(r.code_revision)            AS code_revision
+FROM latest l
+JOIN `ftw-week-08`.`01-control`.data_quality_results r
+  ON r.run_id = l.run_id AND r.layer = l.layer AND r.dataset = l.dataset
+GROUP BY l.layer, l.dataset, l.executed_at, l.run_id;
