@@ -27,6 +27,9 @@ folder, leaving March alone.
 > lists as 19 September 07:08.
 
 ## Run 1 — March only
+<img width="1202" height="369" alt="image" src="https://github.com/user-attachments/assets/c092882f-8b94-4a49-9ec7-ea8bc9d10307" />
+<img width="1374" height="679" alt="image" src="https://github.com/user-attachments/assets/3f4687a8-2254-43ea-abc2-073eeca7e067" />
+<img width="1371" height="533" alt="image" src="https://github.com/user-attachments/assets/c4a972e9-836d-4c71-9eb0-ce0ff3042079" />
 
 Job run `206635342552428` · 07:16–07:21 · 5m 18s · **Succeeded**
 
@@ -45,6 +48,9 @@ Job run `206635342552428` · 07:16–07:21 · 5m 18s · **Succeeded**
 | `green_tripdata_2026-03.parquet` | `6e4fa18f-f86c-489b-a89e-220144028acc` | SUCCESS | 44,208 | `bb1c81eed6…` | 2026-09-18T23:08:12.475 |
 
 ## Run 2 — April added
+<img width="1964" height="369" alt="image" src="https://github.com/user-attachments/assets/8a8d607c-0131-4a3b-97cf-b1daf140f6b5" />
+<img width="1372" height="681" alt="image" src="https://github.com/user-attachments/assets/ebcf3026-319c-41bd-9e24-2002895aa909" />
+<img width="1374" height="558" alt="image" src="https://github.com/user-attachments/assets/2738376e-9a50-4d75-8624-09f2dd53efba" />
 
 Job run `349729896388012` · 07:25–07:30 · 5m 13s · **Succeeded**
 
@@ -68,7 +74,9 @@ Job run `349729896388012` · 07:25–07:30 · 5m 13s · **Succeeded**
 reopened.
 
 ## Run 3 — May added
-
+<img width="1960" height="367" alt="image" src="https://github.com/user-attachments/assets/420ed556-d9e2-4a09-bd66-48a8c30a67bc" />
+<img width="1376" height="678" alt="image" src="https://github.com/user-attachments/assets/f90d4fa1-b3b3-4aa2-9416-fb973bfb6e9e" />
+<img width="1373" height="576" alt="image" src="https://github.com/user-attachments/assets/77cbb8ef-f99d-4f29-9397-39983dac6b48" />
 | Object | Value | Change |
 |---|---:|---:|
 | `bronze_green_taxi` | 133,367 | +44,921 |
