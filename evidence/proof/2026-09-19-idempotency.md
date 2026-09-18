@@ -22,6 +22,15 @@ identical afterwards. No batch was registered, no row was rewritten.
 
 Nothing was moved, dropped or edited between the two snapshots. The sources in
 the Volume were untouched.
+## Before
+<img width="1330" height="683" alt="image" src="https://github.com/user-attachments/assets/d2c470af-12f3-4c86-93c4-012df6138351" />
+<img width="1325" height="572" alt="image" src="https://github.com/user-attachments/assets/67810b9c-030c-489c-b7a9-e1cc537027d9" />
+
+## After
+<img width="1915" height="644" alt="image" src="https://github.com/user-attachments/assets/bacee320-0977-4849-b600-e9314de80a49" />
+<img width="1330" height="681" alt="image" src="https://github.com/user-attachments/assets/0173b0bf-7219-48c6-a10a-e6271edb9ff7" />
+<img width="1329" height="573" alt="image" src="https://github.com/user-attachments/assets/bf527901-661c-4f72-89eb-7ed3f48ab8dd" />
+
 
 ## Snapshot comparison
 
