@@ -344,7 +344,11 @@ WHERE run_id = dq_run_id;
 
 
 -- Review the run:
--- SELECT check_name, status, severity, fail_count, total_count,
---        ROUND(fail_pct, 4) AS fail_pct, threshold_pct, details
--- FROM `ftw-week-08`.`01-control`.data_quality_results
--- WHERE run_id = dq_run_id ORDER BY status DESC, check_name;
+ SELECT check_name, status, severity, fail_count, total_count,
+       ROUND(fail_pct, 4) AS fail_pct, threshold_pct, details
+FROM `ftw-week-08`.`01-control`.data_quality_results
+WHERE layer = 'bronze' AND dataset = 'green_taxi'
+  AND run_id = (SELECT run_id FROM `ftw-week-08`.`01-control`.data_quality_results
+                WHERE layer = 'bronze' AND dataset = 'green_taxi'
+                ORDER BY executed_at DESC LIMIT 1)
+ORDER BY status DESC, check_name;

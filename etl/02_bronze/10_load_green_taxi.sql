@@ -230,3 +230,14 @@ SELECT
     SUBSTRING(content_sha256, 1, 12) AS content_sha256_short
 FROM green_taxi_new_files
 ORDER BY source_object;
+
+SELECT COUNT(*) AS bronze_rows,
+       COUNT(DISTINCT batch_id) AS batches,
+       COUNT(DISTINCT content_sha256) AS file_versions
+FROM `ftw-week-08`.`02-bronze`.green_taxi_raw;
+
+SELECT source_object, source_period, status, row_count,
+       SUBSTRING(content_sha256, 1, 12) AS sha_short
+FROM `ftw-week-08`.`01-control`.ingestion_batches
+WHERE source_system = 'green_taxi'
+ORDER BY source_object;
