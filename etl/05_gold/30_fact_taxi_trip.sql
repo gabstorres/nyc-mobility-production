@@ -1,6 +1,5 @@
 -- ============================================================
--- Gold: fact_taxi_trip 
---
+-- Gold: fact_taxi_trip
 -- Grain: one row per accepted Green Taxi trip after the D10 duplicate policy.
 -- The fact keeps anomalous measures as flagged rows; only duplicate collision
 -- groups quarantined in Silver are excluded.
