@@ -1,6 +1,8 @@
 # Proof: safe restart after a controlled failure
 
 Issue #47 · captured 2026-09-19
+<img width="1198" height="875" alt="image" src="https://github.com/user-attachments/assets/c28e4bab-b3bb-4412-9522-77f01682f518" />
+
 
 ## What was demonstrated
 
