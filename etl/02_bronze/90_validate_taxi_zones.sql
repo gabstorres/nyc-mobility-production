@@ -234,6 +234,14 @@ checks AS (
            'A complete snapshot is one version: all rows must share one content_sha256.'
     FROM base
 
+    -- The same literal ingestion_batches is keyed on, so a Bronze row can
+    -- always be joined back to the batch that loaded it.
+    UNION ALL
+    SELECT 'source_system_domain', 'DOMAIN', 'FAIL', 0.0,
+           SUM(CASE WHEN source_system <> 'taxi_zones' THEN 1 ELSE 0 END), COUNT(*),
+           'source_system must match the value registered in ingestion_batches.'
+    FROM base
+
     UNION ALL
     SELECT 'batch_registered_in_control', 'PROVENANCE', 'FAIL', 0.0,
            SUM(CASE WHEN b.batch_id IS NULL THEN 1 ELSE 0 END), COUNT(*),

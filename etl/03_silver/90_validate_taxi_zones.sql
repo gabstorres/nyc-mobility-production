@@ -205,15 +205,13 @@ checks AS (
            'Every Silver row must carry Bronze provenance plus its Silver processing stamp.'
     FROM silver
 
-    -- Asserts that ONE value is used, not which one. The vocabulary
-    -- itself is unsettled -- data_dictionary.md says nyc_tlc_taxi_zones
-    -- while Bronze and ingestion_batches both say taxi_zones -- so
-    -- pinning a literal here would bake in a decision nobody has made.
-    -- The INFO row below reports the value actually in use.
+    -- The vocabulary is settled: 'taxi_zones' everywhere, matching
+    -- ingestion_batches so a Silver row can be joined back to the batch
+    -- that loaded it.
     UNION ALL
-    SELECT 'source_system_single_value', 'CONSISTENCY', 'FAIL', 0.0,
-           CAST(GREATEST(COUNT(DISTINCT source_system) - 1, 0) AS BIGINT), 1,
-           'A single snapshot must carry exactly one source_system.'
+    SELECT 'source_system_domain', 'DOMAIN', 'FAIL', 0.0,
+           COUNT_IF(source_system <> 'taxi_zones'), COUNT(*),
+           'source_system must match the value registered in ingestion_batches.'
     FROM silver
 
     UNION ALL

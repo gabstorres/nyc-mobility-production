@@ -64,7 +64,7 @@ This document defines every retained Gold field in the approved NYC Mobility Pip
 | `pickup_zone_match_status` | STRING | No | DQ | One of `matched_regular`, `matched_special`, `missing_source_id`, or `unmatched_location_id`. |
 | `dropoff_zone_match_status` | STRING | No | DQ | Uses the same accepted values as pickup zone status. |
 | `weather_match_status` | STRING | No | DQ | One of `matched_unique`, `no_match`, `invalid_pickup_timestamp`, or `ambiguous_match`. Ambiguous matches block publication. |
-| `source_system` | STRING | No | Lineage | Constant source identifier `nyc_tlc_green`. |
+| `source_system` | STRING | No | Lineage | Constant source identifier `green_taxi`, matching `ingestion_batches.source_system`. |
 | `source_file` | STRING | No | Lineage | Original source filename. |
 | `source_file_version` | STRING | No | Lineage | Immutable file-content version derived from the approved checksum strategy. |
 | `batch_id` | STRING | No | Lineage | External source batch/version identifier; not part of trip identity. |
@@ -96,7 +96,7 @@ This document defines every retained Gold field in the approved NYC Mobility Pip
 | `returned_latitude` | DECIMAL(9,6) | No |  | Grid-snapped latitude returned by Open-Meteo. |
 | `returned_longitude` | DECIMAL(9,6) | No |  | Grid-snapped longitude returned by Open-Meteo. |
 | `elevation_m` | DECIMAL(10,3) | No |  | Returned elevation in metres, repeated per hourly row for reproducibility. |
-| `source_system` | STRING | No | Lineage | Constant source identifier `open_meteo_archive`. |
+| `source_system` | STRING | No | Lineage | Constant source identifier `open_meteo`, matching `ingestion_batches.source_system`. |
 | `source_url` | STRING | No | Lineage | Request endpoint URL; canonical parameters are retained separately in control metadata. |
 | `source_response_version` | STRING | No | Lineage | Hash of normalized response content excluding volatile `generationtime_ms`. |
 | `batch_id` | STRING | No | Lineage | External request or response batch identifier. |
@@ -119,11 +119,11 @@ column.
 |---|---|---:|---|---|
 | `zone_key` | BIGINT | No | PK | Deterministic or reproducibly assigned surrogate key used by trip facts. |
 | `location_id` | INT | No | UK | Unique source `LocationID`. IDs 264 and 265 remain valid members. |
-| `borough` | STRING | No |  | Source Borough; values such as `EWR`, `N/A`, and `Unknown` are not converted to SQL null. |
-| `zone_name` | STRING | No |  | Source `Zone`, renamed for clarity. |
-| `service_zone` | STRING | No |  | Source `service_zone`; source `N/A` remains a literal value. |
-| `zone_classification` | STRING | No |  | One of `unknown`, `outside_nyc`, `ewr`, `nyc_borough`, or `other_special`. |
-| `source_system` | STRING | No | Lineage | Constant source identifier `nyc_tlc_taxi_zones`. |
+| `borough` | STRING | No |  | Source Borough, whitespace-trimmed and otherwise left as the source renders it (`Manhattan`, not `manhattan`). Values such as `EWR`, `N/A`, and `Unknown` are not converted to SQL null. |
+| `zone_name` | STRING | No |  | Source `Zone`, renamed for clarity, whitespace-trimmed and left in the source's casing. |
+| `service_zone` | STRING | No |  | Source `service_zone`, lower-cased as a coded category (`boro zone`, `yellow zone`, `airports`, `ewr`); source `N/A` becomes the literal `na` and is not converted to SQL null. |
+| `zone_classification` | STRING | No |  | The canonical coded form, always lower case: one of `unknown`, `outside_nyc`, `ewr`, `nyc_borough`, or `other_special`. |
+| `source_system` | STRING | No | Lineage | Constant source identifier `taxi_zones`, matching `ingestion_batches.source_system`. |
 | `source_file` | STRING | No | Lineage | Original Taxi Zone snapshot filename. |
 | `source_file_version` | STRING | No | Lineage | Immutable snapshot-content version. |
 | `batch_id` | STRING | No | Lineage | Snapshot ingestion batch identifier. |

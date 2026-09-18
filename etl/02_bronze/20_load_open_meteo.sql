@@ -120,7 +120,7 @@ SELECT
     hourly_units.precipitation  AS hourly_units_precipitation,
     hourly_units.weather_code   AS hourly_units_weather_code,
 
-    'open_meteo_archive' AS source_system,
+    'open_meteo' AS source_system,
     'https://archive-api.open-meteo.com/v1/archive' AS source_url,
     _metadata.file_path              AS source_file,
     _metadata.file_size              AS file_size,

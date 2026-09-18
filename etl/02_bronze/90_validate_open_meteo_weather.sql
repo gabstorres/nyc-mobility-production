@@ -291,6 +291,16 @@ checks AS (
            'Every Bronze response must carry full provenance.'
     FROM response_profile
 
+    -- The same literal ingestion_batches is keyed on. These drifted apart
+    -- once already: Bronze rows said open_meteo_archive while their own
+    -- batch row said open_meteo, so a row could not be joined back to the
+    -- batch that loaded it.
+    UNION ALL
+    SELECT 'source_system_domain', 'DOMAIN', 'FAIL', 0.0,
+           SUM(CASE WHEN source_system <> 'open_meteo' THEN 1 ELSE 0 END), COUNT(*),
+           'source_system must match the value registered in ingestion_batches.'
+    FROM bronze
+
     UNION ALL
     SELECT 'batch_registered_in_control', 'PROVENANCE', 'FAIL', 0.0,
            SUM(CASE WHEN b.batch_id IS NULL THEN 1 ELSE 0 END), COUNT(*),

@@ -18,6 +18,17 @@
 -- location_id rather than by borough -- the source is not symmetric
 -- about them: 264 is Unknown / N/A / N/A while 265 is N/A / Outside of
 -- NYC / N/A.
+--
+-- Casing rule, because "standardize" means two different things here and
+-- the two are deliberate:
+--   * borough and zone_name are PROPER NAMES. Trim whitespace, keep the
+--     source's casing, so 'Manhattan' stays 'Manhattan' and can be shown
+--     to a reader without re-capitalising it.
+--   * service_zone is a CODED CATEGORY over a small fixed domain, so it
+--     is lower-cased and 'N/A' becomes 'na'.
+--   * zone_classification is the canonical coded form, always lower case.
+-- Anything that needs a case-insensitive comparison should use
+-- zone_classification rather than lower-casing borough at the point of use.
 -- ============================================================
 
 CREATE TABLE IF NOT EXISTS `ftw-week-08`.`03-silver`.taxi_zones_clean (
