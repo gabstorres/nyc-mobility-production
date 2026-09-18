@@ -15,9 +15,9 @@ Approved facts and dimensions, per `docs/data_model.md`. Dimensions are built be
 Trip and weather measurements stay at their own grain. A trip carries only the weather classification key; temperature and precipitation stay in `fact_weather_hourly` (D12).
 
 Run `20_fact_weather_hourly.sql` before `30_fact_taxi_trip.sql`. The trip build
-consumes the validated `integration_trip_weather` result, then uses the weather
-fact as a build-time lookup for the pickup-hour classification key; it does not
-store a fact-to-fact foreign key.
+reads Silver `green_taxi_clean` joined to the validated `04-integration` key
+maps on `trip_hash`, then uses the weather fact as a build-time lookup for the
+pickup-hour classification key; it does not store a fact-to-fact foreign key.
 
 `90_validate_gold.sql` persists one result row per check to
 `01-control`.data_quality_results and raises an error when any blocking check
