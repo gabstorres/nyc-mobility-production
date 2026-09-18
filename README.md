@@ -106,13 +106,10 @@ nyc-mobility-pipeline/
 │   └── sources.json
 │
 ├── src/
-│   └── ingestion/
+│   └── ingestion/          # unused: the loaders are SQL, see "Known limitations"
 │       ├── __init__.py
 │       ├── batch_tracking.py
-│       ├── green_taxi.py
-│       ├── schema_drift_check.py
-│       ├── weather.py
-│       └── taxi_zones.py
+│       └── schema_drift_check.py
 │
 ├── etl/
 │   ├── README.md
@@ -122,11 +119,11 @@ nyc-mobility-pipeline/
 │   │   └── 90_validate_control.sql
 │   │
 │   ├── 02_bronze/
-│   │   ├── 10_load_green_taxi.py
+│   │   ├── 10_load_green_taxi.sql
 │   │   ├── 20_load_open_meteo.sql
 │   │   ├── 30_load_taxi_zones.sql
 │   │   ├── 90_validate_green_taxi.sql
-│   │   ├── 90_validate_open_meteo.sql
+│   │   ├── 90_validate_open_meteo_weather.sql
 │   │   └── 90_validate_taxi_zones.sql
 │   │
 │   ├── 03_silver/
@@ -212,21 +209,20 @@ must not be duplicated between `src/`, `etl/`, and notebooks.
 Commit notebooks in source format, not `.ipynb`, so pull requests show readable
 diffs and no cell output is committed.
 
-### Not yet implemented
+### Known limitations
 
-The tree above is the target layout. These files do not exist yet:
+Every stage from Control through Analytics is implemented and runs. What follows
+is what a reader should not assume.
 
-| Location | Missing files |
+| | |
 |---|---|
-| `src/ingestion/` | `weather.py`, `taxi_zones.py` |
-| `etl/02_bronze/` | `90_validate_open_meteo.sql` (in progress on a branch) |
-| `etl/03_silver/` | `30_clean_taxi_zones.sql`, `90_validate_weather_hourly.sql`, `90_validate_taxi_zones.sql` |
-| `etl/04_integration/` onward | All files |
-| `docs/model/` | `nyc_mobility_star_schema.dbml` |
-
-`etl/02_bronze/20_load_open_meteo.sql` reads a weather response that is already
-in the source Volume. When `src/ingestion/weather.py` adds the API request, this
-step becomes `20_load_open_meteo.py`.
+| `src/ingestion/*.py` | **Unused.** The Bronze loaders were rewritten as SQL. `batch_tracking.py` and `schema_drift_check.py` remain in the tree but nothing imports them. |
+| Landing paths | Literals inside `read_files`, which cannot take a variable. Staging a subset of files for a test means moving files in the Volume. |
+| `code_revision` | Every gate stamps `'UNSET'`. A job parameter cannot reach it, because it is a `DECLARE OR REPLACE VARIABLE` rather than a parameter marker. |
+| Schema drift | A **missing** source column fails loudly; a **new** one is silently ignored by the explicit column lists. |
+| Weather coverage | The series was requested in UTC while trips are local, so 180 trips have no weather hour. Weather measures cover 133,173 of 133,353 (D20). |
+| `supersedes_batch_id` | The column exists and is not populated (D24). |
+| NYC DOT advisories | Deferred (D02). No traffic fact, dimension or bridge exists. |
 
 ## Architecture and tables
 

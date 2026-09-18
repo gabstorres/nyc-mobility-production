@@ -14,11 +14,11 @@ Compare the March, April, and May schemas before accepting a source contract. Do
 
 | Source | Rows | Schema | Observed Dates | Key Nulls | Duplicate Candidates | Other Anomalies | Evidence |
 |---|---:|---|---|---|---|---|---|
-| Taxi March 2026 | 44,208 | 21 cols, identical across files | 2026-03 dominant; 9 stray rows (1× 2009-01, 8× 2026-02) | `ehail_fee` 100%; 6 other cols ~15% (same rows) | 0 exact duplicates | 111 negative fares, 368 zero-distance/high-fare, 1 dropoff-before-pickup | `notebooks/profile_green_taxi_tripdata.ipynb` |
-| Taxi April 2026 | 44,238 | 21 cols, identical across files | 2026-04 dominant; 3 stray rows (1× 2026-03, 2× 2026-05) | `ehail_fee` 100%; 6 other cols ~14% (same rows) | 0 exact duplicates | 153 negative fares, 439 zero-distance/high-fare | `notebooks/profile_green_taxi_tripdata.ipynb` |
-| Taxi May 2026 | 44,921 | 21 cols, identical across files | 2026-05 dominant; 10 stray rows (2× 2008-12, 8× 2026-04) | `ehail_fee` 100%; 6 other cols ~13% (same rows) | 0 exact duplicates | 120 negative fares, 548 zero-distance/high-fare | `notebooks/profile_green_taxi_tripdata.ipynb` |
+| Taxi March 2026 | 44,208 | 21 cols, identical across files | 2026-03 dominant; 9 stray rows (1× 2009-01, 8× 2026-02) | `ehail_fee` 100%; 6 other cols ~15% (same rows) | 0 exact duplicates | 111 negative fares, 368 zero-distance/high-fare, 1 dropoff-before-pickup | `notebooks/profile_green_taxi.ipynb` |
+| Taxi April 2026 | 44,238 | 21 cols, identical across files | 2026-04 dominant; 3 stray rows (1× 2026-03, 2× 2026-05) | `ehail_fee` 100%; 6 other cols ~14% (same rows) | 0 exact duplicates | 153 negative fares, 439 zero-distance/high-fare | `notebooks/profile_green_taxi.ipynb` |
+| Taxi May 2026 | 44,921 | 21 cols, identical across files | 2026-05 dominant; 10 stray rows (2× 2008-12, 8× 2026-04) | `ehail_fee` 100%; 6 other cols ~13% (same rows) | 0 exact duplicates | 120 negative fares, 548 zero-distance/high-fare | `notebooks/profile_green_taxi.ipynb` |
 | Taxi zones | 265 | `LocationID`, `Borough`, `Zone`, `service_zone` | Snapshot | 0 nulls across all columns | No duplicate `LocationID` values found | Sentinel records found at `LocationID` 264 and 265; special Borough values include `EWR`, `N/A`, and `Unknown` | `notebooks/profile_taxi_zones` |
-| Weather (Open-Meteo) | 2,208 | `time`, `temperature_2m`, `precipitation`, `weather_code` | 2026-03-01T00:00 to 2026-05-31T23:00 (UTC), no gaps | 0 nulls across all columns | No duplicate `time` values found | 12 distinct `weather_code` values; 0 rows with negative precipitation or out-of-range temperature; requested coordinates snapped to a grid point ~3-4 km away (40.738136, -74.04254, elevation 32.0m) | `notebooks/profile_open_meteo.ipynb` |
+| Weather (Open-Meteo) | 2,208 | `time`, `temperature_2m`, `precipitation`, `weather_code` | 2026-03-01T00:00 to 2026-05-31T23:00 (UTC), no gaps | 0 nulls across all columns | No duplicate `time` values found | 12 distinct `weather_code` values; 0 rows with negative precipitation or out-of-range temperature; requested coordinates snapped to a grid point ~3-4 km away (40.738136, -74.04254, elevation 32.0m) | `notebooks/profile_weather.ipynb` |
 
 Profile null rates for every column, full-row equality, candidate-key collisions, within-file and across-file duplicate candidates, unexpected codes, negative or zero measures, missing timestamps, durations, out-of-month events, and pickup and drop-off reference coverage.
 
@@ -32,7 +32,7 @@ The public taxi schema does not establish a unique trip ID. Do not treat `Vendor
 - **Source path:** `/Volumes/ftw-week-08/00-source/group_a_source/green_taxi/`
 - **File format:** Parquet
 - **Dataset type:** Monthly trip-level extract, ingested incrementally (`COPY INTO`)
-- **Profiling notebook:** `notebooks/profile_green_taxi_tripdata.ipynb`
+- **Profiling notebook:** `notebooks/profile_green_taxi.ipynb`
 
 ### Dataset Schema
 
@@ -217,7 +217,7 @@ The following items require team agreement before Silver processing:
 - **Request window profiled:** 2026-03-01 through 2026-05-31 (the full three-month window, not just a sample)
 - **Dataset type:** External REST API, hourly time series (not a static file)
 - **Model:** not specified in the request; the default model was used and is not yet pinned (see Recommended Downstream Rules)
-- **Profiling notebook:** `notebooks/profile_open_meteo.ipynb`
+- **Profiling notebook:** `notebooks/profile_weather.ipynb`
 - **Sample response evidence:** saved to `/Volumes/ftw-week-08/00-source/group_a_source/weather/open_meteo_mar_may_2026_sample.json`, SHA-256 `4e6c8d0b238f1329245af1e06081cc0d43c0f46501a38d846605065fb4e87e96`
 
 ### Response Schema

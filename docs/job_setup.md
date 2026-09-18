@@ -21,11 +21,12 @@ Dependencies are what enforce the gates: if a validation task fails, everything 
 | Task key | Type | File | Depends on |
 |---|---|---|---|
 | `control_setup` | SQL file | `etl/01_control/00_create_control_tables.sql` | — |
-| `load_green_taxi` | Notebook | `etl/02_bronze/10_load_green_taxi.py` | `control_setup` |
+| `gate_control` | SQL file | `etl/01_control/90_validate_control.sql` | the three load tasks |
+| `load_green_taxi` | SQL file | `etl/02_bronze/10_load_green_taxi.sql` | `control_setup` |
 | `load_open_meteo` | SQL file | `etl/02_bronze/20_load_open_meteo.sql` | `control_setup` |
 | `load_taxi_zones` | SQL file | `etl/02_bronze/30_load_taxi_zones.sql` | `control_setup` |
 | `gate_bronze_green_taxi` | SQL file | `etl/02_bronze/90_validate_green_taxi.sql` | `load_green_taxi` |
-| `gate_bronze_open_meteo` | SQL file | `etl/02_bronze/90_validate_open_meteo.sql` | `load_open_meteo` |
+| `gate_bronze_open_meteo` | SQL file | `etl/02_bronze/90_validate_open_meteo_weather.sql` | `load_open_meteo` |
 | `gate_bronze_taxi_zones` | SQL file | `etl/02_bronze/90_validate_taxi_zones.sql` | `load_taxi_zones` |
 | `clean_green_taxi` | SQL file | `etl/03_silver/10_clean_green_taxi.sql` | `gate_bronze_green_taxi` |
 | `clean_weather_hourly` | SQL file | `etl/03_silver/20_clean_weather_hourly.sql` | `gate_bronze_open_meteo` |
@@ -78,4 +79,4 @@ Commit short summaries under `evidence/proof/`, not full exports.
 
 ## Later
 
-Defining the job in `databricks.yml` (a Databricks Asset Bundle) puts the task graph under version control and lets CI deploy it. Worth doing once the task list stops changing.
+The task graph now lives in `databricks.yml`, which is the definition the job actually runs from. This document explains the shape and the reasoning; `databricks.yml` is the source of truth for the tasks themselves.
