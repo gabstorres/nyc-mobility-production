@@ -1,25 +1,69 @@
--- ============================================================
--- Gold: dim_taxi_zone
+-- Gold dimension: dim_taxi_zone (issue #36).
 --
--- Stage:     05 Gold
--- Runs after: Integration gate
--- Target:    `ftw-week-08`.`05-gold`.dim_taxi_zone
--- Grain:     one row per source LocationID in the selected snapshot
--- Contract:  docs/data_model.md, docs/source_to_target_mapping.md
--- Owner:     TODO
+-- Grain: one row per Taxi Zone LocationID.
 --
--- Dimensions are built before facts; facts resolve keys only against built dimensions.
--- ============================================================
+-- SCD: Type 0 / full refresh.
+--
+-- Built from Silver taxi_zones_clean.
+--
+-- D07 approved no SCD Type 2 behaviour.
+--
+-- Borough values are passed through exactly as supplied by Silver.
+-- Any source-value corrections belong upstream in Silver.
+--
+-- Classification rules are applied in the approved order:
+--
+-- 1. 264 -> unknown
+-- 2. 265 -> outside_nyc
+-- 3. EWR -> ewr
+-- 4. NYC boroughs -> nyc_borough
+-- 5. Everything else -> other_special
+--
+-- zone_key uses a deterministic cast of location_id because
+-- LocationID is already a stable unique business key.
 
--- To implement:
---   - zone_key surrogate PK, location_id unique business key
---   - borough, zone name, service zone and snapshot lineage retained
---   - zone_classification rules in order: 264 unknown, 265 outside_nyc,
---     borough EWR ewr, five NYC boroughs nyc_borough, otherwise other_special
---   - full refresh from the pinned snapshot (D11)
+CREATE OR REPLACE TABLE `ftw-week-08`.`05-gold`.dim_taxi_zone AS
 
--- ------------------------------------------------------------
--- Remove this block when the query above is implemented. It keeps an
--- unfinished stage from looking successful in a Databricks job run.
--- ------------------------------------------------------------
-SELECT raise_error('12_dim_taxi_zone.sql is not implemented yet');
+SELECT
+
+    CAST(location_id AS BIGINT) AS zone_key,
+
+    location_id,
+
+    zone_name,
+
+    borough,
+
+    service_zone,
+
+    CASE
+        WHEN location_id = 264 THEN 'unknown'
+
+        WHEN location_id = 265 THEN 'outside_nyc'
+
+        WHEN UPPER(TRIM(borough)) = 'EWR'
+            THEN 'ewr'
+
+        WHEN UPPER(TRIM(borough)) IN (
+            'BRONX',
+            'BROOKLYN',
+            'MANHATTAN',
+            'QUEENS',
+            'STATEN ISLAND'
+        )
+            THEN 'nyc_borough'
+
+        ELSE 'other_special'
+    END AS zone_classification,
+
+    source_system,
+
+    source_file,
+
+    source_file_version,
+
+    batch_id,
+
+    ingested_at
+
+FROM `ftw-week-08`.`03-silver`.taxi_zones_clean;

@@ -40,11 +40,8 @@ KNOWN_DIGIT_TABLE_NAMES = {
 # Silver Taxi Zones work in progress (#81 / issue #29). To be renamed to the
 # README layout and saved in Databricks source format by its owner.
 KNOWN_LAYOUT_EXCEPTIONS = {
-    "etl/03_silver/taxi_zones_create_table_silver.sql.dbquery.ipynb",
-    "etl/03_silver/taxi_zones_validate_silver.sql",
 }
 KNOWN_IPYNB_OUTSIDE_NOTEBOOKS = {
-    "etl/03_silver/taxi_zones_create_table_silver.sql.dbquery.ipynb",
 }
 
 
