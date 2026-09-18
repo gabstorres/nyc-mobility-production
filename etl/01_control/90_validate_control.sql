@@ -137,7 +137,12 @@ WITH checks AS (
         'status_in_allowed_domain',
         'validity',
         'FAIL',
-        COUNT_IF(status IS NULL OR status NOT IN ('DISCOVERED', 'STARTED', 'SUCCESS', 'FAILED')),
+        -- SUPERSEDED is a batch whose content was later reloaded, usually
+        -- because its Bronze table was dropped. It keeps its own evidence
+        -- but no longer counts as a live SUCCESS, which is what stops
+        -- no_duplicate_successful_batches firing on a legitimate reload.
+        COUNT_IF(status IS NULL OR status NOT IN
+                 ('DISCOVERED', 'STARTED', 'SUCCESS', 'FAILED', 'SUPERSEDED')),
         COUNT(*),
         0.0,
         'allowed: DISCOVERED / STARTED / SUCCESS / FAILED'
