@@ -146,7 +146,19 @@ ON target.weather_observation_key = source.weather_observation_key
 -- lineage move; the business key is what matched, so it cannot change.
 -- Gated on source_response_version so an unchanged rerun is a true no-op
 -- and does not churn silver_processed_at across 2,208 rows.
-WHEN MATCHED AND NOT (target.source_response_version <=> source.source_response_version)
+-- Fires on a content change OR on a lineage change. Gating on
+-- source_response_version alone meant a Bronze row that was re-registered
+-- under a new batch left Silver pointing at the old one -- which Bronze had
+-- just demoted to SUPERSEDED -- so batch_registered_in_control failed here
+-- while Bronze passed. batch_id is safe to compare because Bronze only
+-- issues a new one when something genuinely changed; run_id is not, since
+-- it changes on every run and would rewrite every row.
+WHEN MATCHED AND NOT (
+         target.source_response_version <=> source.source_response_version
+     AND target.source_system           <=> source.source_system
+     AND target.content_sha256          <=> source.content_sha256
+     AND target.batch_id                <=> source.batch_id
+)
 THEN UPDATE SET
     observation_timestamp_local = source.observation_timestamp_local,
     observation_date_local      = source.observation_date_local,
