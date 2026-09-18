@@ -117,7 +117,12 @@ UPDATE `ftw-week-08`.`01-control`.ingestion_batches
 SET status = 'SUPERSEDED'
 WHERE source_system = 'taxi_zones'
   AND status = 'SUCCESS'
-  AND content_sha256 IN ((SELECT zones_content_sha256));
+  AND content_sha256 IN ((SELECT zones_content_sha256))
+  -- Only when this run will actually register a replacement. Demoting
+  -- unconditionally left the Bronze rows pointing at a SUPERSEDED batch on
+  -- any rerun of unchanged content, which batch_registered_in_control
+  -- correctly rejects.
+  AND zones_is_new;
 
 INSERT INTO `ftw-week-08`.`01-control`.ingestion_batches (
     batch_id, source_system, source_object, source_period, request_parameters,
