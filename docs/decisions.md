@@ -2,7 +2,7 @@
 
 This document is the canonical record of important product, data, and engineering decisions for the NYC Mobility Pipeline. It records what was decided, why it was chosen, which alternatives were rejected, what assumptions remain, and what consequences follow.
 
-**Last updated:** 2026-09-17  
+**Last updated:** 2026-09-18
 **Decision priority:** correctness > reliability > maintainability > scalability > observability > efficiency
 
 ## Maintenance rule
@@ -40,7 +40,7 @@ This log explains why choices were made. Detailed implementation contracts live 
 | D15 | Retain quality-flagged Green Taxi rows in the clean Silver table instead of quarantining them; quarantine only duplicate collisions | Active | `green_taxi_clean` requires explicit flag filtering per measure; only D10 duplicates are excluded from it |
 | D16 | Standardize Taxi Zones in Silver and preserve sentinel records | Approved through Issue #29 | Taxi Zone IDs 264 and 265 remain explicit Silver members and location_id uniqueness is validated on every load |
 | D17 | Validate Bronze and Silver per source with a shared result contract; remove `etl/00_source_profile/` | Proposed | Each source has its own gate and may advance independently; Integration requires every source's Silver gate |
-| D18 | Build both Gold facts with deterministic keys, MERGE-with-delete publication, and pre-write guards | Proposed | Facts mirror validated Silver exactly; a revised source contribution cannot leave stale Gold rows |
+| D18 | Build both Gold facts from validated upstream results with deterministic keys and convergent MERGE publication | Proposed through Issue #38 | Facts preserve their declared grains; Gold validation blocks publication on grain, FK, lineage, quarantine, or reconciliation failures |
 
 
 ## Foundational decisions
@@ -590,71 +590,37 @@ Classification logic is handled separately through zone_classification.
   `sql/`, and no longer list `00_source_profile/`.
 
 
-## Gold fact decisions
+## Gold fact build decision
 
-### D18: Gold fact build strategy
+### D18: Deterministic facts and a blocking Gold gate
 
-**Status:** Proposed (issue #38)
+**Status:** Proposed through Issue #38
 **Decision date:** 2026-09-18
 
-**Decisions:**
+**Decision:**
 
-1. **`trip_key` is recomputed from the Silver typed values** listed in
-   `data_model.md`, not carried from Silver's `trip_hash`. Silver's hash is
-   built from raw Bronze strings to keep D10 collision detection stable before
-   casting; the Gold key is the documented one. Both are deterministic, and the
-   build fails if the Gold key is not unique at the declared grain.
-2. **`weather_observation_key` is reused from Silver**, not recomputed, so the
-   same observation can never have two different keys.
-3. **Publication is `MERGE` on the key with `WHEN NOT MATCHED BY SOURCE THEN
-   DELETE`.** Rerunning identical input produces identical rows; a revised
-   contribution replaces its own rows; a trip removed upstream is removed here
-   (D04). Silver rebuilds in full today, so the staged set is the complete
-   accepted population. When Silver becomes incremental, both the staged view
-   and the MERGE must be scoped by `source_file`.
-4. **Pre-write guards, rather than post-hoc checks**, for the three conditions
-   that would corrupt the grain: duplicate `trip_key`, a zone dimension that is
-   not unique on `location_id`, and a trip matching more than one weather
-   observation (the dictionary's `ambiguous_match`). Each raises an error, so
-   the job task fails and nothing is published.
-5. **The trip fact reads `fact_weather_hourly`** for the pickup-hour
-   classification key. This is a build-time lookup, so trip and weather
-   classifications cannot disagree; no fact-to-fact foreign key is stored
-   (D12). It makes `fact_taxi_trip` depend on `fact_weather_hourly`.
-6. **`source_file_version` comes from `ingestion_batches.source_version_id`**,
-   joined on `batch_id`, so a Gold row traces to the exact source version.
-   `run_id` is generated per Gold execution, since `pipeline_runs` is deferred
-   (D14).
+1. `fact_weather_hourly` reuses Silver's deterministic observation key and
+   resolves Date, Hour, and Weather Classification keys only from built Gold
+   dimensions.
+2. `fact_taxi_trip` consumes the validated `integration_trip_weather` result.
+   It resolves role-playing dimension keys in Gold and copies only the matched
+   weather classification key; hourly temperature and precipitation remain on
+   the weather fact.
+3. `trip_key` is a deterministic hash of the approved D10 identity inputs and
+   excludes batch, run, and ingestion metadata.
+4. Both facts use `MERGE` on their deterministic keys. Because the current
+   Silver and Integration inputs are complete accepted snapshots, the delete
+   arm makes a revised contribution converge without leaving stale rows.
+5. Pre-write guards block join fan-out, duplicate trip keys, unresolved required
+   FKs, ambiguous weather matches, and non-unique source-version lineage.
+6. `90_validate_gold.sql` writes one row per check to the shared control table
+   and raises an error if any blocking check fails.
 
-**Rejected alternatives:**
+**Known contract gap:** `requested_timezone` is specified in the data
+dictionary, but the request parameter is not persisted in Bronze or Silver.
+Gold does not fabricate it. It must be captured upstream before the column can
+be published and validated.
 
-- Carrying Silver's `trip_hash` as `trip_key`: it is computed from pre-cast
-  strings, so it is not the key the model documents.
-- `INSERT OVERWRITE` or `REPLACE WHERE` per source file: `REPLACE WHERE` does
-  not accept a subquery, so the file list would have to be hardcoded or passed
-  in, and it cannot express "delete trips that disappeared upstream".
-- Copying temperature and precipitation onto trips: multiplies hourly
-  measurements by the number of trips in that hour (D12).
-
-**Contract gaps found while implementing, not silently filled:**
-
-- **`fact_weather_hourly.requested_timezone`** is in the data dictionary, but
-  neither Bronze nor Silver captures the request's timezone parameter. The
-  column is not created. Either Bronze captures it or the dictionary drops it.
-- **`passenger_count`** is `DECIMAL(10,2)` in the dictionary and `INT` in
-  Silver. Gold follows the dictionary and casts; one of the two should change.
-- **Silver's `implausible_duration_flag` and
-  `implausible_passenger_count_flag`** have no Gold equivalent in the
-  dictionary. The documented flags (`passenger_count_zero_flag`,
-  `passenger_count_over_8_flag`) are derived here instead. A duration flag for
-  "over 24 hours" has no documented home; add it to the dictionary or drop it
-  from Silver.
-- **`source_row_locator`** has no stable source value, so it is written as
-  null (the dictionary allows null).
-
-**Consequences:**
-
-- Both facts can be rerun any number of times without changing business
-  content; only `gold_processed_at` and `run_id` change.
-- Dimensions must exist before either fact runs, and the Gold gate (#39) still
-  owns PK, FK and reconciliation checks.
+**Consequence:** The files are implementation-ready but are not proof of a
+passing Gold layer until the Integration branch is merged and the Databricks
+proof run records counts, reconciled measures, and an identical-input rerun.
