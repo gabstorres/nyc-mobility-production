@@ -41,7 +41,7 @@ Dependencies are what enforce the gates: if a validation task fails, everything 
 | `dim_taxi_zone` | SQL file | `etl/05_gold/12_dim_taxi_zone.sql` | `gate_integration` |
 | `dim_weather_classification` | SQL file | `etl/05_gold/13_dim_weather_classification.sql` | `gate_integration` |
 | `fact_weather_hourly` | SQL file | `etl/05_gold/20_fact_weather_hourly.sql` | the four dimension tasks |
-| `fact_taxi_trip` | SQL file | `etl/05_gold/30_fact_taxi_trip.sql` | the four dimension tasks |
+| `fact_taxi_trip` | SQL file | `etl/05_gold/30_fact_taxi_trip.sql` | the four dimension tasks **and** `fact_weather_hourly` |
 | `gate_gold` | SQL file | `etl/05_gold/90_validate_gold.sql` | both fact tasks |
 | `analytics_activity` | SQL file | `etl/06_analytics/10_activity_by_time_and_zone.sql` | `gate_gold` |
 | `analytics_weather` | SQL file | `etl/06_analytics/20_trip_behavior_by_weather.sql` | `gate_gold` |
