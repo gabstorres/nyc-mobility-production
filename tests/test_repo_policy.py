@@ -32,10 +32,10 @@ CATALOG = "`ftw-week-08`"
 # test_allowlists_are_not_stale fails as soon as an entry no longer matches,
 # so the list cannot silently rot.
 
-# PR #70 results table; to move to `01-control`.data_quality_results (D17).
-KNOWN_DIGIT_TABLE_NAMES = {
-    ("etl/02_bronze/90_validate_taxi_zones.sql", "90_validate_taxi_zones"),
-}
+# Empty: the PR #70 results table `02-bronze`.90_validate_taxi_zones was the
+# last entry, and that gate now writes to `01-control`.data_quality_results
+# per D17, so no table name begins with a digit.
+KNOWN_DIGIT_TABLE_NAMES = set()
 
 # Silver Taxi Zones work in progress (#81 / issue #29). To be renamed to the
 # README layout and saved in Databricks source format by its owner.
