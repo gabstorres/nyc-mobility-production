@@ -145,8 +145,12 @@ FROM read_files(
 );
 
 
--- New work exists when this response content has never succeeded, or when
--- the target is empty (Bronze dropped, control row survived).
+-- There is work to do when this content has never succeeded, when the target
+-- is empty (Bronze dropped but the control row survived), or when the stored
+-- row differs from what this loader now produces. That last clause keeps the
+-- batch registration in step with the MERGE below: if the MERGE is going to
+-- write, a batch must exist to attribute the write to, or the gate's
+-- batch_registered_in_control check fails on a batch_id nothing registered.
 DECLARE OR REPLACE VARIABLE weather_is_new BOOLEAN;
 SET VARIABLE weather_is_new = (
     SELECT
@@ -154,6 +158,22 @@ SET VARIABLE weather_is_new = (
           JOIN open_meteo_source s ON b.content_sha256 = s.content_sha256
           WHERE b.source_system = 'open_meteo' AND b.status = 'SUCCESS') = 0
      OR (SELECT COUNT(*) FROM `ftw-week-08`.`02-bronze`.open_meteo_weather_raw) = 0
+     OR (SELECT COUNT(*)
+         FROM `ftw-week-08`.`02-bronze`.open_meteo_weather_raw t
+         JOIN open_meteo_source s
+           ON t.coordinate_id        = s.coordinate_id
+          AND t.requested_start_date = s.requested_start_date
+          AND t.requested_end_date   = s.requested_end_date
+          AND t.weather_model        = s.weather_model
+         WHERE NOT (t.source_response_version <=> s.source_response_version)
+            OR NOT (t.source_system           <=> s.source_system)
+            OR NOT (t.source_url              <=> s.source_url)) > 0
+     -- Rows pointing at a batch that is no longer a live SUCCESS.
+     OR (SELECT COUNT(*)
+         FROM `ftw-week-08`.`02-bronze`.open_meteo_weather_raw t
+         WHERE NOT EXISTS (
+             SELECT 1 FROM `ftw-week-08`.`01-control`.ingestion_batches b
+             WHERE b.batch_id = t.batch_id AND b.status = 'SUCCESS')) > 0
 );
 
 
@@ -161,6 +181,21 @@ SET VARIABLE weather_is_new = (
 -- Register the batch. request_parameters records the call that produced
 -- this payload, which is the whole reason that column exists.
 -- ------------------------------------------------------------
+-- A reload of content that already succeeded means the earlier batch's rows
+-- are gone (the target was dropped) or are being replaced. Demote it rather
+-- than leaving two SUCCESS rows for one content hash, which is what
+-- no_duplicate_successful_batches flags as double processing. The demoted
+-- row keeps its own batch_id, row_count and timestamps, so the earlier
+-- attempt stays auditable rather than being deleted.
+UPDATE `ftw-week-08`.`01-control`.ingestion_batches
+SET status = 'SUPERSEDED'
+WHERE source_system = 'open_meteo'
+  AND status = 'SUCCESS'
+  AND content_sha256 IN ((SELECT content_sha256 FROM open_meteo_source))
+  -- Only when this run will actually register a replacement; see the note
+  -- in 30_load_taxi_zones.sql.
+  AND weather_is_new;
+
 INSERT INTO `ftw-week-08`.`01-control`.ingestion_batches (
     batch_id, source_system, source_object, source_period, request_parameters,
     content_sha256, source_version_id, schema_fingerprint, raw_uri,
@@ -206,7 +241,18 @@ AND target.requested_start_date = source.requested_start_date
 AND target.requested_end_date   = source.requested_end_date
 AND target.weather_model        = source.weather_model
 
-WHEN MATCHED AND NOT (target.source_response_version <=> source.source_response_version)
+-- Fires on a content change OR on a provenance change. Gating on
+-- source_response_version alone meant a code change to how provenance is
+-- recorded could never reach a row already landed: renaming source_system
+-- from open_meteo_archive to open_meteo left the stored value stale forever,
+-- because the payload itself had not changed. Run-scoped columns
+-- (run_id, batch_id, ingested_at) are deliberately not compared, or every
+-- run would rewrite every row.
+WHEN MATCHED AND NOT (
+         target.source_response_version <=> source.source_response_version
+     AND target.source_system           <=> source.source_system
+     AND target.source_url              <=> source.source_url
+)
 THEN UPDATE SET
     requested_latitude          = source.requested_latitude,
     requested_longitude         = source.requested_longitude,

@@ -112,11 +112,18 @@ ON target.location_id = source.location_id
 
 -- Business content changed in the snapshot. <=> is null-safe; = would
 -- treat null <> null as a change and rewrite the row every run.
+-- Business content OR lineage. Comparing business values alone left Silver
+-- pointing at a batch Bronze had since demoted, which
+-- batch_registered_in_control rejects. batch_id is safe to compare because
+-- Bronze only issues a new one when something genuinely changed.
 WHEN MATCHED AND NOT (
          target.borough             <=> source.borough
      AND target.zone_name           <=> source.zone_name
      AND target.service_zone        <=> source.service_zone
      AND target.zone_classification <=> source.zone_classification
+     AND target.source_system       <=> source.source_system
+     AND target.content_sha256      <=> source.content_sha256
+     AND target.batch_id            <=> source.batch_id
 )
 THEN UPDATE SET
     borough             = source.borough,

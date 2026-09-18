@@ -133,6 +133,18 @@ SET VARIABLE gt_run_started_at = current_timestamp();
 -- ------------------------------------------------------------
 -- Register one batch per new file, before loading anything.
 -- ------------------------------------------------------------
+-- A reload of content that already succeeded means the earlier batch's rows
+-- are gone (the target was dropped) or are being replaced. Demote it rather
+-- than leaving two SUCCESS rows for one content hash, which is what
+-- no_duplicate_successful_batches flags as double processing. The demoted
+-- row keeps its own batch_id, row_count and timestamps, so the earlier
+-- attempt stays auditable rather than being deleted.
+UPDATE `ftw-week-08`.`01-control`.ingestion_batches
+SET status = 'SUPERSEDED'
+WHERE source_system = 'green_taxi'
+  AND status = 'SUCCESS'
+  AND content_sha256 IN ((SELECT content_sha256 FROM green_taxi_new_files));
+
 INSERT INTO `ftw-week-08`.`01-control`.ingestion_batches (
     batch_id, source_system, source_object, source_period, request_parameters,
     content_sha256, source_version_id, schema_fingerprint, raw_uri,
@@ -156,6 +168,16 @@ FROM green_taxi_new_files;
 -- stay STARTED for the control gate's stuck-batch check to surface.
 -- Rows are joined to their batch by content hash.
 -- ------------------------------------------------------------
+-- Clear any rows for the content about to be loaded. The insert below and
+-- the row-count check after it are separate statements, so a run can commit
+-- rows and then fail before its batch reaches SUCCESS. On the next run that
+-- file looks unprocessed again -- correctly -- and without this delete the
+-- restart would append a second copy of every row. The Python loader this
+-- replaced did the same cleanup in its exception handler.
+DELETE FROM `ftw-week-08`.`02-bronze`.green_taxi_raw
+WHERE content_sha256 IN (SELECT content_sha256 FROM green_taxi_new_files);
+
+
 INSERT INTO `ftw-week-08`.`02-bronze`.green_taxi_raw (
     VendorID, lpep_pickup_datetime, lpep_dropoff_datetime, store_and_fwd_flag,
     RatecodeID, PULocationID, DOLocationID, passenger_count, trip_distance,

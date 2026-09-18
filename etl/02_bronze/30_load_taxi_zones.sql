@@ -95,6 +95,15 @@ SET VARIABLE zones_is_new = (
             AND content_sha256 = zones_content_sha256
             AND status = 'SUCCESS') = 0
      OR (SELECT COUNT(*) FROM `ftw-week-08`.`02-bronze`.taxi_zones_raw) = 0
+     -- Rows whose batch_id is no longer a live SUCCESS batch. The snapshot
+     -- content never changes, so without this the rows keep the batch_id they
+     -- were first inserted under while later runs register and demote batches
+     -- around them, and batch_registered_in_control fails on every row.
+     OR (SELECT COUNT(*)
+         FROM `ftw-week-08`.`02-bronze`.taxi_zones_raw t
+         WHERE NOT EXISTS (
+             SELECT 1 FROM `ftw-week-08`.`01-control`.ingestion_batches b
+             WHERE b.batch_id = t.batch_id AND b.status = 'SUCCESS')) > 0
 );
 
 
@@ -107,6 +116,23 @@ SET VARIABLE zones_is_new = (
 -- cannot introspect the source column signature in the same statement.
 -- Column presence for this source is checked in 90_validate_taxi_zones.
 -- ------------------------------------------------------------
+-- A reload of content that already succeeded means the earlier batch's rows
+-- are gone (the target was dropped) or are being replaced. Demote it rather
+-- than leaving two SUCCESS rows for one content hash, which is what
+-- no_duplicate_successful_batches flags as double processing. The demoted
+-- row keeps its own batch_id, row_count and timestamps, so the earlier
+-- attempt stays auditable rather than being deleted.
+UPDATE `ftw-week-08`.`01-control`.ingestion_batches
+SET status = 'SUPERSEDED'
+WHERE source_system = 'taxi_zones'
+  AND status = 'SUCCESS'
+  AND content_sha256 IN ((SELECT zones_content_sha256))
+  -- Only when this run will actually register a replacement. Demoting
+  -- unconditionally left the Bronze rows pointing at a SUPERSEDED batch on
+  -- any rerun of unchanged content, which batch_registered_in_control
+  -- correctly rejects.
+  AND zones_is_new;
+
 INSERT INTO `ftw-week-08`.`01-control`.ingestion_batches (
     batch_id, source_system, source_object, source_period, request_parameters,
     content_sha256, source_version_id, schema_fingerprint, raw_uri,
@@ -149,10 +175,17 @@ USING (
 ) AS source
 ON target.location_id = source.location_id
 
+-- Business content OR lineage. Comparing business values alone meant a newly
+-- registered batch never reached the rows, because a reference snapshot's
+-- content is identical every run.
 WHEN MATCHED AND NOT (
-         target.borough      <=> source.borough
-     AND target.zone         <=> source.zone
-     AND target.service_zone <=> source.service_zone
+         target.borough             <=> source.borough
+     AND target.zone                <=> source.zone
+     AND target.service_zone        <=> source.service_zone
+     AND target.source_system       <=> source.source_system
+     AND target.source_file_version <=> source.source_file_version
+     AND target.content_sha256      <=> source.content_sha256
+     AND target.batch_id            <=> source.batch_id
 ) THEN UPDATE SET
     borough             = source.borough,
     zone                = source.zone,
