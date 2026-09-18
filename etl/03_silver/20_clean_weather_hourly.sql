@@ -16,11 +16,14 @@ CREATE TABLE IF NOT EXISTS `ftw-week-08`.`03-silver`.weather_hourly (
 
     -- Business key
     coordinate_id               STRING,
-    observation_timestamp_utc   TIMESTAMP,
+    -- TIMESTAMP_NTZ, not TIMESTAMP: the API sends a zoneless ISO8601 string
+    -- and these are stored exactly as sent. A session-local TIMESTAMP would
+    -- make the stored value depend on the cluster's timezone setting.
+    observation_timestamp_utc   TIMESTAMP_NTZ,
     weather_model                STRING,
 
     -- DST-aware local conversion (D09)
-    observation_timestamp_local TIMESTAMP,
+    observation_timestamp_local TIMESTAMP_NTZ,
     observation_date_local       DATE,
     observation_hour_local       INT,
 
@@ -43,6 +46,7 @@ CREATE TABLE IF NOT EXISTS `ftw-week-08`.`03-silver`.weather_hourly (
     source_system              STRING,
     source_file                 STRING,
     source_url                  STRING,
+    content_sha256              STRING,
     source_response_version     STRING,
     run_id                       STRING,
     batch_id                     STRING,
@@ -52,26 +56,42 @@ CREATE TABLE IF NOT EXISTS `ftw-week-08`.`03-silver`.weather_hourly (
 
 -- Everything above is DDL (run once); everything below runs on every batch.
 
+-- One timestamp for the whole run rather than per-evaluation.
+DECLARE OR REPLACE VARIABLE silver_run_at TIMESTAMP;
+SET VARIABLE silver_run_at = current_timestamp();
+
 -- Explodes the four hourly arrays by position (arrays_zip + explode),
 -- converts to America/New_York, and maps weather_code to its WMO category.
 -- Trusts Bronze's own ingestion gate for array alignment/non-emptiness.
--- Insert-only, mirroring Bronze's MERGE stance (no revision policy yet).
+--
+-- Bronze replaces a revised response in place (D04), so Silver must pick
+-- that revision up. WHEN MATCHED below does it; without that branch the
+-- revision handling dead-ends at this boundary and Silver keeps serving
+-- the superseded measures forever.
+--
+-- to_timestamp_ntz + convert_timezone, NOT to_timestamp + from_utc_timestamp.
+-- The API sends a zoneless string, so to_timestamp resolves it through the
+-- SESSION timezone and from_utc_timestamp then shifts it again: on a UTC
+-- cluster 2026-03-01T00:00Z correctly became 19:00 on 28 Feb, but on an
+-- America/New_York cluster the two steps cancelled and it became midnight
+-- on 1 March. convert_timezone is explicit about both ends and depends on
+-- no session state.
 MERGE INTO `ftw-week-08`.`03-silver`.weather_hourly AS target
 USING (
     SELECT
         sha2(to_json(named_struct(
             'coordinate_id', b.coordinate_id,
-            'observation_timestamp_utc', to_timestamp(hourly_row.hourly_time),
+            'observation_timestamp_utc', to_timestamp_ntz(hourly_row.hourly_time),
             'weather_model', b.weather_model
-        )), 256) AS weather_observation_key,
+        ), map('ignoreNullFields', 'false')), 256) AS weather_observation_key,
 
         b.coordinate_id,
-        to_timestamp(hourly_row.hourly_time) AS observation_timestamp_utc,
+        to_timestamp_ntz(hourly_row.hourly_time) AS observation_timestamp_utc,
         b.weather_model,
 
-        from_utc_timestamp(to_timestamp(hourly_row.hourly_time), 'America/New_York') AS observation_timestamp_local,
-        CAST(from_utc_timestamp(to_timestamp(hourly_row.hourly_time), 'America/New_York') AS DATE) AS observation_date_local,
-        HOUR(from_utc_timestamp(to_timestamp(hourly_row.hourly_time), 'America/New_York')) AS observation_hour_local,
+        convert_timezone('UTC', 'America/New_York', to_timestamp_ntz(hourly_row.hourly_time)) AS observation_timestamp_local,
+        CAST(convert_timezone('UTC', 'America/New_York', to_timestamp_ntz(hourly_row.hourly_time)) AS DATE) AS observation_date_local,
+        HOUR(convert_timezone('UTC', 'America/New_York', to_timestamp_ntz(hourly_row.hourly_time))) AS observation_hour_local,
 
         CAST(hourly_row.hourly_temperature_2m AS DECIMAL(8,3)) AS temperature_2m_c,
         CAST(hourly_row.hourly_precipitation AS DECIMAL(10,3)) AS precipitation_mm,
@@ -109,24 +129,54 @@ USING (
         b.source_system,
         b.source_file,
         b.source_url,
+        b.content_sha256,
         b.source_response_version,
         b.run_id,
         b.batch_id,
         b.ingested_at,
-        current_timestamp() AS silver_processed_at
+        silver_run_at AS silver_processed_at
     FROM `ftw-week-08`.`02-bronze`.open_meteo_weather_raw AS b
     LATERAL VIEW explode(
         arrays_zip(b.hourly_time, b.hourly_temperature_2m, b.hourly_precipitation, b.hourly_weather_code)
     ) exploded_table AS hourly_row
 ) AS source
 ON target.weather_observation_key = source.weather_observation_key
+
+-- A revised response for an hour we already hold. Only the measures and
+-- lineage move; the business key is what matched, so it cannot change.
+-- Gated on source_response_version so an unchanged rerun is a true no-op
+-- and does not churn silver_processed_at across 2,208 rows.
+WHEN MATCHED AND NOT (target.source_response_version <=> source.source_response_version)
+THEN UPDATE SET
+    observation_timestamp_local = source.observation_timestamp_local,
+    observation_date_local      = source.observation_date_local,
+    observation_hour_local      = source.observation_hour_local,
+    temperature_2m_c            = source.temperature_2m_c,
+    precipitation_mm            = source.precipitation_mm,
+    weather_code                = source.weather_code,
+    weather_condition_category  = source.weather_condition_category,
+    returned_latitude           = source.returned_latitude,
+    returned_longitude          = source.returned_longitude,
+    elevation_m                 = source.elevation_m,
+    requested_latitude          = source.requested_latitude,
+    requested_longitude         = source.requested_longitude,
+    source_system               = source.source_system,
+    source_file                 = source.source_file,
+    source_url                  = source.source_url,
+    content_sha256              = source.content_sha256,
+    source_response_version     = source.source_response_version,
+    run_id                      = source.run_id,
+    batch_id                    = source.batch_id,
+    ingested_at                 = source.ingested_at,
+    silver_processed_at         = source.silver_processed_at
+
 WHEN NOT MATCHED THEN INSERT (
     weather_observation_key, coordinate_id, observation_timestamp_utc, weather_model,
     observation_timestamp_local, observation_date_local, observation_hour_local,
     temperature_2m_c, precipitation_mm, weather_code, weather_condition_category,
     returned_latitude, returned_longitude, elevation_m,
     requested_latitude, requested_longitude,
-    source_system, source_file, source_url, source_response_version,
+    source_system, source_file, source_url, content_sha256, source_response_version,
     run_id, batch_id, ingested_at, silver_processed_at
 ) VALUES (
     source.weather_observation_key, source.coordinate_id, source.observation_timestamp_utc, source.weather_model,
@@ -134,6 +184,6 @@ WHEN NOT MATCHED THEN INSERT (
     source.temperature_2m_c, source.precipitation_mm, source.weather_code, source.weather_condition_category,
     source.returned_latitude, source.returned_longitude, source.elevation_m,
     source.requested_latitude, source.requested_longitude,
-    source.source_system, source.source_file, source.source_url, source.source_response_version,
+    source.source_system, source.source_file, source.source_url, source.content_sha256, source.source_response_version,
     source.run_id, source.batch_id, source.ingested_at, source.silver_processed_at
 );
