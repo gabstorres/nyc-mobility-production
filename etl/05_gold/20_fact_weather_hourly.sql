@@ -13,8 +13,11 @@ CREATE TABLE IF NOT EXISTS `ftw-week-08`.`05-gold`.fact_weather_hourly (
     observation_hour_key INT,
     weather_classification_key STRING,
     coordinate_id STRING,
-    observation_timestamp_utc TIMESTAMP,
-    observation_timestamp_local TIMESTAMP,
+    -- TIMESTAMP_NTZ, matching Silver. A plain TIMESTAMP would resolve Silver's
+    -- values through the cluster's session timezone on insert, undoing the
+    -- conversion fix in 20_clean_weather_hourly.sql.
+    observation_timestamp_utc TIMESTAMP_NTZ,
+    observation_timestamp_local TIMESTAMP_NTZ,
     weather_model STRING,
     temperature_2m_c DECIMAL(8,3),
     precipitation_mm DECIMAL(10,3),

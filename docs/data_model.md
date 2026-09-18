@@ -23,6 +23,10 @@ Q4 is not a Gold implementation requirement while it remains deferred. This mode
 
 - Reporting timezone is `America/New_York`.
 - Weather is attributed using the trip pickup hour.
+- Weather measures are reported against the trips that have a weather match:
+  133,173 of 133,353 accepted trips (99.87%). The weather series was requested
+  in UTC while trips are local, so 2026-05-31 after 20:00 has no weather and is
+  understated in any by-date weather view (D20).
 - Open-Meteo represents one documented citywide NYC coordinate.
 - Q2 and Q3 describe association, not causation.
 - Trip count measures recorded taxi activity and is only a proxy for demand.

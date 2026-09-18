@@ -15,10 +15,13 @@ CREATE TABLE IF NOT EXISTS `ftw-week-08`.`05-gold`.fact_taxi_trip (
     dropoff_zone_key BIGINT,
     pickup_weather_classification_key STRING,
     vendor_id INT,
-    pickup_datetime_local TIMESTAMP,
-    dropoff_datetime_local TIMESTAMP,
-    pickup_timestamp_utc TIMESTAMP,
-    dropoff_timestamp_utc TIMESTAMP,
+    -- TIMESTAMP_NTZ, matching Silver and Integration. A plain TIMESTAMP here
+    -- would convert those values through the cluster's session timezone on
+    -- insert, undoing the determinism fix one layer down.
+    pickup_datetime_local TIMESTAMP_NTZ,
+    dropoff_datetime_local TIMESTAMP_NTZ,
+    pickup_timestamp_utc TIMESTAMP_NTZ,
+    dropoff_timestamp_utc TIMESTAMP_NTZ,
     store_and_fwd_flag STRING,
     rate_code_id INT,
     pickup_location_id INT,
@@ -66,31 +69,27 @@ USING DELTA;
 DECLARE OR REPLACE VARIABLE gold_run_id STRING;
 SET VARIABLE gold_run_id = uuid();
 
--- Step 1: deterministic trip identity, UTC conversions, measures and flags.
--- named_struct keeps field names in the serialized identity and never uses
--- operational metadata to manufacture uniqueness. The source is the persisted,
--- validated Integration result, not a new direct join to Silver.
+-- Step 1: trip identity, UTC conversions, measures and flags.
+--
+-- trip_key is Silver's published trip_hash (D19), not a hash recomputed here.
+-- The old version serialized the TYPED Silver columns, which is a different
+-- string over rounded values, so one identity had two definitions with
+-- nothing keeping them in step.
+--
+-- Trip attributes come from Silver and match outcomes from the two
+-- Integration maps, joined on trip_hash. Stage 04 owns only the match
+-- outcome, so trip columns exist in exactly one place.
 CREATE OR REPLACE TEMP VIEW gold_trip_base AS
 SELECT
-    sha2(
-        to_json(
-            named_struct(
-                'vendor_id', t.vendor_id,
-                'pickup_datetime_local', t.pickup_datetime_local,
-                'dropoff_datetime_local', t.dropoff_datetime_local,
-                'pickup_location_id', t.pickup_location_id,
-                'dropoff_location_id', t.dropoff_location_id,
-                'trip_distance_miles', t.trip_distance_miles,
-                'fare_amount_usd', t.fare_amount_usd
-            )
-        ),
-        256
-    ) AS trip_key,
+    t.trip_hash AS trip_key,
     t.vendor_id,
     t.pickup_datetime_local,
     t.dropoff_datetime_local,
-    t.pickup_timestamp_utc,
-    to_utc_timestamp(t.dropoff_datetime_local, 'America/New_York') AS dropoff_timestamp_utc,
+    wx.pickup_timestamp_utc,
+    -- convert_timezone, not to_utc_timestamp: the latter resolves a
+    -- TIMESTAMP_NTZ through the session timezone, the same defect fixed in
+    -- Silver weather.
+    convert_timezone('America/New_York', 'UTC', t.dropoff_datetime_local) AS dropoff_timestamp_utc,
     t.store_and_fwd_flag,
     t.rate_code_id,
     t.pickup_location_id,
@@ -128,15 +127,20 @@ SELECT
         AS zero_distance_high_fare_flag,
     COALESCE(t.passenger_count = 0, FALSE) AS passenger_count_zero_flag,
     COALESCE(t.passenger_count > 8, FALSE) AS passenger_count_over_8_flag,
-    t.pickup_zone_match_status,
-    t.dropoff_zone_match_status,
-    t.pickup_weather_observation_key,
-    t.pickup_weather_match_status,
+    z.pickup_zone_match_status,
+    z.dropoff_zone_match_status,
+    wx.pickup_weather_observation_key,
+    wx.pickup_weather_match_status,
     t.source_system,
     t.source_file,
     t.batch_id,
     t.ingested_at
-FROM `ftw-week-08`.`05-gold`.integration_trip_weather AS t;
+FROM `ftw-week-08`.`03-silver`.green_taxi_clean AS t
+-- Inner joins on purpose: the Integration gate has already proven both maps
+-- cover every accepted trip exactly once, so a missing row is a broken
+-- invariant that the guard below should catch, not a trip to carry forward.
+JOIN `ftw-week-08`.`04-integration`.trip_zone_map    AS z  ON z.trip_hash  = t.trip_hash
+JOIN `ftw-week-08`.`04-integration`.trip_weather_map AS wx ON wx.trip_hash = t.trip_hash;
 
 -- Step 2: resolve both role-playing Taxi Zone keys only against the built Gold
 -- dimension. The match statuses were already assigned and validated in Stage 04.
@@ -151,10 +155,17 @@ LEFT JOIN `ftw-week-08`.`05-gold`.dim_taxi_zone AS pz
 LEFT JOIN `ftw-week-08`.`05-gold`.dim_taxi_zone AS dz
     ON b.dropoff_location_id = dz.location_id;
 
+-- Every grain guard now measures against Silver's accepted-trip count, which
+-- is the grain the whole chain is supposed to preserve.
+SELECT CASE
+         WHEN (SELECT COUNT(*) FROM gold_trip_base)
+              <> (SELECT COUNT(*) FROM `ftw-week-08`.`03-silver`.green_taxi_clean)
+         THEN raise_error('fact_taxi_trip: Integration map joins changed the trip grain')
+       END;
+
 SELECT CASE
          WHEN (SELECT COUNT(*) FROM gold_trip_zones)
-              <> (SELECT COUNT(*)
-                  FROM `ftw-week-08`.`05-gold`.integration_trip_weather)
+              <> (SELECT COUNT(*) FROM `ftw-week-08`.`03-silver`.green_taxi_clean)
          THEN raise_error('fact_taxi_trip: Taxi Zone joins changed the trip grain')
        END;
 

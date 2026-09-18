@@ -41,6 +41,8 @@ This log explains why choices were made. Detailed implementation contracts live 
 | D16 | Standardize Taxi Zones in Silver and preserve sentinel records | Approved through Issue #29 | Taxi Zone IDs 264 and 265 remain explicit Silver members and location_id uniqueness is validated on every load |
 | D17 | Validate Bronze and Silver per source with a shared result contract; remove `etl/00_source_profile/` | Proposed | Each source has its own gate and may advance independently; Integration requires every source's Silver gate |
 | D18 | Build both Gold facts from validated upstream results with deterministic keys and convergent MERGE publication | Proposed through Issue #38 | Facts preserve their declared grains; Gold validation blocks publication on grain, FK, lineage, quarantine, or reconciliation failures |
+| D19 | Publish Silver's `trip_hash` as the trip identity and carry it into Gold as `trip_key` | Approved | One definition of trip identity; Integration keys its maps on it and Gold stops recomputing a second hash |
+| D20 | Accept the weather coverage gap and report weather measures against their own denominator | Approved | Q2 and Q3 describe 133,173 of 133,353 trips; the shortfall is concentrated on the evening of 2026-05-31 |
 
 
 ## Foundational decisions
@@ -602,12 +604,14 @@ Classification logic is handled separately through zone_classification.
 1. `fact_weather_hourly` reuses Silver's deterministic observation key and
    resolves Date, Hour, and Weather Classification keys only from built Gold
    dimensions.
-2. `fact_taxi_trip` consumes the validated `integration_trip_weather` result.
+2. `fact_taxi_trip` reads Silver `green_taxi_clean` joined to the validated
+   `04-integration`.`trip_zone_map` and `trip_weather_map` on `trip_hash`.
    It resolves role-playing dimension keys in Gold and copies only the matched
    weather classification key; hourly temperature and precipitation remain on
    the weather fact.
-3. `trip_key` is a deterministic hash of the approved D10 identity inputs and
-   excludes batch, run, and ingestion metadata.
+3. `trip_key` is Silver's published `trip_hash` (D19), which is the deterministic
+   hash of the approved D10 identity inputs and excludes batch, run, and
+   ingestion metadata. Gold carries it rather than recomputing its own.
 4. Both facts use `MERGE` on their deterministic keys. Because the current
    Silver and Integration inputs are complete accepted snapshots, the delete
    arm makes a revised contribution converge without leaving stale rows.
@@ -624,3 +628,46 @@ be published and validated.
 **Consequence:** The files are implementation-ready but are not proof of a
 passing Gold layer until the Integration branch is merged and the Databricks
 proof run records counts, reconciled measures, and an identical-input rerun.
+
+### D20: Accept the weather coverage gap rather than re-requesting the series
+
+**Status:** Approved
+**Decision date:** 2026-09-18
+
+**Decision:**
+
+Weather-based measures (Q2, Q3) are reported against the trips that have a
+weather match, not against all accepted trips. The denominator is stated
+wherever such a measure appears: **133,173 of 133,353 accepted trips, 99.87%**.
+
+**Reason:**
+
+The Open-Meteo series was requested for 2026-03-01 to 2026-05-31 in **UTC**,
+while trips are recorded in `America/New_York`. The two windows do not align at
+either end, so 180 trips have no weather hour to match:
+
+| | trips |
+|---|---:|
+| Inside the reporting window but past the weather window | 175 |
+| Outside the reporting window entirely (2008-12, 2009-01, 2026-02) | 11 |
+
+The 175 are all late on **2026-05-31**: the last weather hour is 23:00 UTC,
+which is 19:00 local, so pickups after 20:00 that evening have no match.
+
+**Rejected alternative:** re-requesting the series for 2026-02-28 to 2026-06-01
+and reloading. This is the better fix and remains the recommendation for any
+future run — the source window was specified wrongly, not the pipeline. It was
+rejected for this iteration on time, not on merit: it needs the superseded
+Bronze response deleted first (a wider request is a different business key, so
+it inserts beside the old one rather than replacing it, and two responses
+covering the same hour break Silver's MERGE), then a full reload through
+Integration and Gold.
+
+**Consequence:**
+
+- Any by-date weather view understates **2026-05-31**. The shortfall is
+  systematic, not random, and must not be read as a finding about that day.
+- `weather_match_status` on `fact_taxi_trip` carries the reason per row, so the
+  excluded trips stay identifiable rather than silently absent.
+- 11 of the 180 can never be covered by any request for this period; they are
+  permanently out of scope for Q2 and Q3.
