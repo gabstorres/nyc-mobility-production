@@ -1,7 +1,7 @@
 {
   "registry_status": "official_links_checked_payloads_not_validated",
   "taxi": {
-    "source_system": "nyc_tlc_green",
+    "source_system": "green_taxi",
     "index_url": "https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page",
     "bootstrap_files": [
       {

@@ -112,7 +112,7 @@ Bronze preserves source names and values where practical. Silver owns standardiz
 | Hour seed | Constant values `0–23` | None | `hour_of_day INT` | `dim_hour.hour_of_day` | Unique business value. |
 | Hour seed | `hour_of_day` | None | `hour_label STRING` | `dim_hour.hour_label` | Zero-padded label such as `00:00`, `13:00`. |
 | Hour seed | `hour_of_day` | None | `time_of_day_band STRING` | `dim_hour.time_of_day_band` | Proposed rule: overnight `00–05`, morning `06–11`, afternoon `12–17`, evening `18–23`. |
-| Ingestion metadata | `source_system` | `source_system` | `source_system` | Trip fact, weather fact, and Taxi Zone dimension `source_system` | Values include `nyc_tlc_green`, `nyc_tlc_taxi_zones`, and `open_meteo_archive`. Not taken from business payload. |
+| Ingestion metadata | `source_system` | `source_system` | `source_system` | Trip fact, weather fact, and Taxi Zone dimension `source_system` | Values are `green_taxi`, `taxi_zones`, and `open_meteo`, identical to `ingestion_batches.source_system` so a row can be joined back to its own batch. Not taken from business payload. |
 | Ingestion metadata | Source filename | `source_file` | `source_file` | Trip fact and Taxi Zone dimension `source_file` | Original filename retained. Not part of analytical grain. |
 | Ingestion metadata | Weather endpoint URL | `source_url` | `source_url` | `fact_weather_hourly.source_url` | Request endpoint retained separately from canonical request parameters. |
 | Ingestion metadata | File content checksum | `content_sha256` and `source_file_version` | `source_file_version` | Trip fact and Taxi Zone dimension `source_file_version` | Immutable file identity. Same checksum and successful layer/version is a no-op unless replay is explicitly requested. |
