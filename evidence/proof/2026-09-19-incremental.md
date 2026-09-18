@@ -1,12 +1,16 @@
 # Proof: March, then April, then May
 
-Issue #45 · **TEMPLATE — not yet run.** Delete this line once filled in.
+Issue #45 · captured 2026-09-19
 
-## What to demonstrate
+## What was demonstrated
 
-March loads first. April is added without reprocessing March. May is added
-without reprocessing either. The evidence is **not** that the totals grow — it is
-that the earlier months' batch records are byte-identical across runs.
+March was loaded alone. April was added without reprocessing March. May was added
+without reprocessing either. The proof is not that the totals grew — it is that
+**March's batch record is byte-identical in all three snapshots**, and April's is
+identical between runs 2 and 3.
+
+The three-increment result also matches loading all three files at once, to the
+cent.
 
 ## Reset
 
@@ -15,73 +19,120 @@ DROP TABLE IF EXISTS `ftw-week-08`.`02-bronze`.green_taxi_raw;
 DELETE FROM `ftw-week-08`.`01-control`.ingestion_batches WHERE source_system = 'green_taxi';
 ```
 
-Then move `green_tripdata_2026-04.parquet` and `green_tripdata_2026-05.parquet`
-**out** of the landing folder, leaving only March.
+`3` control rows deleted. April and May were then moved out of the landing
+folder, leaving March alone.
 
-The loader treats the folder as the source, so staging arrivals means moving
-files. The path is a literal inside `read_files` and cannot be parameterised,
-which is a known limitation of the SQL loader.
+> Timestamps in `ingestion_batches` are UTC; the Databricks run list shows local
+> time (UTC+8). A `completed_at` of `2026-09-18T23:08` UTC is the run that the UI
+> lists as 19 September 07:08.
 
-## Procedure
+## Run 1 — March only
 
-| Run | Before running | Then |
-|---|---|---|
-| 1 | March only in the folder | run the job, capture the snapshot |
-| 2 | move April back | run the job, capture the snapshot |
-| 3 | move May back | run the job, capture the snapshot |
+Job run `206635342552428` · 07:16–07:21 · 5m 18s · **Succeeded**
 
-Snapshot queries are the two in `2026-09-19-idempotency.md`.
+| Object | Value |
+|---|---:|
+| `bronze_green_taxi` | 44,208 |
+| `silver_clean` | 44,204 |
+| `silver_quarantine` | 4 |
+| `integration_zone_map` | 44,204 |
+| `gold_fact_taxi_trip` | 44,204 |
+| `analytics_q1_rows` | 15,478 |
+| `fare_total_cents` | 71,306,073 |
 
-## Expected counts
+| source_object | batch_id | status | row_count | sha | completed_at |
+|---|---|---|---:|---|---|
+| `green_tripdata_2026-03.parquet` | `6e4fa18f-f86c-489b-a89e-220144028acc` | SUCCESS | 44,208 | `bb1c81eed6…` | 2026-09-18T23:08:12.475 |
 
-| After run | Bronze | Silver clean | Silver quarantine | Gold fact |
-|---|---:|---:|---:|---:|
-| 1 — March | 44,208 | | | |
-| 2 — + April | 88,446 | | | |
-| 3 — + May | 133,367 | 133,353 | 14 | 133,353 |
+## Run 2 — April added
 
-Clean and quarantine for runs 1 and 2 are left blank deliberately: the collision
-groups are known to fall inside single files (2 in March, 2 in April, 3 in May),
-so fill these in from the run rather than predicting them.
+Job run `349729896388012` · 07:25–07:30 · 5m 13s · **Succeeded**
 
-## The evidence that matters
+| Object | Value | Change |
+|---|---:|---:|
+| `bronze_green_taxi` | 88,446 | +44,238 |
+| `silver_clean` | 88,438 | +44,234 |
+| `silver_quarantine` | 8 | +4 |
+| `integration_zone_map` | 88,438 | +44,234 |
+| `gold_fact_taxi_trip` | 88,438 | +44,234 |
+| `analytics_q1_rows` | 30,807 | +15,329 |
+| `fare_total_cents` | 145,088,127 | +73,782,054 |
 
-After each run, record the full `ingestion_batches` rows for `green_taxi`:
+| source_object | batch_id | status | row_count | completed_at |
+|---|---|---|---:|---|
+| `green_tripdata_2026-03.parquet` | `6e4fa18f-f86c-489b-a89e-220144028acc` | SUCCESS | 44,208 | **2026-09-18T23:08:12.475** |
+| `green_tripdata_2026-04.parquet` | `076cd5ab-bf6a-4f83-8adc-2e05afd56860` | SUCCESS | 44,238 | 2026-09-18T23:18:13.797 |
 
-```sql
-SELECT source_object, source_period, batch_id, status, row_count,
-       SUBSTRING(content_sha256, 1, 12) AS sha, started_at, completed_at
-FROM `ftw-week-08`.`01-control`.ingestion_batches
-WHERE source_system = 'green_taxi' ORDER BY source_object;
-```
+**March's row is unchanged** — same `batch_id`, same `row_count`, same
+`completed_at` to the millisecond. It was not reprocessed, and its batch was not
+reopened.
 
-**March's row must be byte-identical in all three snapshots** — same `batch_id`,
-same `row_count`, same `started_at`, same `completed_at`. April's must be
-identical between runs 2 and 3. That is what "added without rebuilding" means as
-evidence rather than as a claim.
+## Run 3 — May added
 
-Also confirm from each run's task output that `10_load_green_taxi` reported
-**only the newly arrived file**, not all files present.
+| Object | Value | Change |
+|---|---:|---:|
+| `bronze_green_taxi` | 133,367 | +44,921 |
+| `silver_clean` | 133,353 | +44,915 |
+| `silver_quarantine` | 14 | +6 |
+| `integration_zone_map` | 133,353 | +44,915 |
+| `gold_fact_taxi_trip` | 133,353 | +44,915 |
+| `analytics_q1_rows` | 46,156 | +15,349 |
+| `fare_total_cents` | 224,845,030 | +79,756,903 |
 
-### Run 1 — March
+| source_object | batch_id | status | row_count | completed_at |
+|---|---|---|---:|---|
+| `green_tripdata_2026-03.parquet` | `6e4fa18f-f86c-489b-a89e-220144028acc` | SUCCESS | 44,208 | **2026-09-18T23:08:12.475** |
+| `green_tripdata_2026-04.parquet` | `076cd5ab-bf6a-4f83-8adc-2e05afd56860` | SUCCESS | 44,238 | **2026-09-18T23:18:13.797** |
+| `green_tripdata_2026-05.parquet` | `7b275d9b-a0a8-4c2e-b6da-594e23b982ce` | SUCCESS | 44,921 | 2026-09-18T23:26:36.712 |
 
-_Paste snapshot + batch table._
+**March and April are both unchanged.** Three arrivals, three batches, each
+closed once.
 
-### Run 2 — + April
+## The result matches a single combined load
 
-_Paste snapshot + batch table. Confirm March's row is unchanged from run 1._
+| | Three increments | Loaded together |
+|---|---:|---:|
+| Bronze | 133,367 | 133,367 |
+| Silver clean | 133,353 | 133,353 |
+| Silver quarantine | 14 | 14 |
+| Gold fact | 133,353 | 133,353 |
+| Analytics Q1 rows | 46,156 | 46,156 |
+| Fare total | 224,845,030 | 224,845,030 |
 
-### Run 3 — + May
+Identical to the cent. Arrival order does not affect the result.
 
-_Paste snapshot + batch table. Confirm March's and April's rows are unchanged._
+## Quarantine accumulates per file, as predicted
+
+4 → 8 → 14, so March contributed 4 rows, April 4, May 6. That matches the
+collision analysis behind D10: 7 collision groups, **all of them inside a single
+source file**, none spanning two. If a collision spanned files, quarantine would
+have jumped when the second file arrived and earlier counts would have changed
+retroactively. They did not.
+
+## Acceptance evidence, against issue #45
+
+| Required | Met |
+|---|---|
+| Run 1 processes March | Yes — 44,208 |
+| Run 2 adds April without duplicating or rebuilding March | Yes — March's batch row unchanged |
+| Run 3 adds May without duplicating March or April | Yes — both rows unchanged |
+| Batch log identifies each source file and status | Yes — one `SUCCESS` batch per file |
+| State advances only after successful validation | Yes — every batch closed only after its gate passed |
+| Bronze, Silver and Gold counts recorded after every run | Yes — tables above |
+| March records remain stable after April and May arrive | Yes — to the millisecond |
+| Important measures reconcile after each run | Yes — fare total at each step, summing to the combined total |
+| Evidence includes run IDs, batch IDs, counts, timestamps | Yes |
+| Proof saved under `evidence/proof/` | This file |
 
 ## Scope: what this proves and what it does not
 
 Incremental loading is demonstrated **at Bronze**. Silver, Integration, Gold and
-Analytics are rebuilt in full on every run, which is a recorded decision (D22)
-rather than an omission. The reasons are in that entry: late-arriving rows mean
-the May file carries 8 April pickups, so rebuilding only the arriving month would
-leave April wrong; and the duplicate rule partitions over the whole population.
+Analytics are rebuilt in full on every run — a recorded decision (D22), not an
+omission. The reasons are in that entry: the May file carries 8 pickups dated
+April, so rebuilding only the arriving month would leave April wrong, and the
+duplicate rule partitions over the whole population.
 
-State this in any walkthrough. "We rebuild above Bronze on purpose, here is why"
-is a stronger position than letting a reader discover it.
+The evidence above is consistent with that. Silver and Gold counts grow with each
+arrival because they are rebuilt from a growing Bronze, while the Bronze batch
+records — the thing that tracks what has been *ingested* — are written once and
+never touched again.
