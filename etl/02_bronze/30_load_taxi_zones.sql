@@ -147,7 +147,13 @@ SELECT
     NULL, NULL,
     NULL, MAX(file_size), MAX(file_modified_time)
 FROM taxi_zones_source
-WHERE zones_is_new;
+WHERE zones_is_new
+-- Required, not defensive. This SELECT aggregates (MAX) with no GROUP BY, so
+-- it returns ONE row even when the WHERE matches nothing -- a row of NULLs.
+-- Without this, every run where zones_is_new is false still registered a
+-- batch, with null source_object and null file metadata, and then closed it
+-- SUCCESS. That is what produced three SUCCESS batches for one content hash.
+HAVING COUNT(*) > 0;
 
 
 -- ------------------------------------------------------------
