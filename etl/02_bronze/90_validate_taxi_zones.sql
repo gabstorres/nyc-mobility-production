@@ -196,6 +196,16 @@ FROM `ftw-week-08`.`02-bronze`.taxi_zones_raw;
 
 -- COMMAND ----------
 
+DECLARE OR REPLACE VARIABLE dq_run_id STRING;
+
+SET VARIABLE dq_run_id = uuid();
+
+SELECT
+    dq_run_id AS run_id,
+    current_timestamp() AS executed_at;
+
+-- COMMAND ----------
+
 WITH base AS (
     SELECT
         location_id,
