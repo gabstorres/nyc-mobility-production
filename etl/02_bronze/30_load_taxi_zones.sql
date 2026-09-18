@@ -184,7 +184,14 @@ ON target.location_id = source.location_id
 -- Business content OR lineage. Comparing business values alone meant a newly
 -- registered batch never reached the rows, because a reference snapshot's
 -- content is identical every run.
-WHEN MATCHED AND NOT (
+--
+-- zones_is_new gates the whole branch. zones_batch_id is a fresh uuid on every
+-- run whether or not a batch is registered, so without this guard a rerun of
+-- unchanged content compared the stored batch_id against an unused uuid, found
+-- them different, and restamped all 265 rows with a batch id that exists
+-- nowhere in ingestion_batches. If no batch was registered there is nothing to
+-- restamp.
+WHEN MATCHED AND zones_is_new AND NOT (
          target.borough             <=> source.borough
      AND target.zone                <=> source.zone
      AND target.service_zone        <=> source.service_zone
