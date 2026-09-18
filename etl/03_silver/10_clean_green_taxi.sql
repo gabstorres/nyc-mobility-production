@@ -15,22 +15,42 @@
 -- measures.
 -- ============================================================
 
+-- One timestamp for the whole run, so the clean and quarantine tables
+-- carry the same silver_processed_at rather than two evaluations of
+-- current_timestamp().
+DECLARE OR REPLACE VARIABLE silver_run_at TIMESTAMP;
+SET VARIABLE silver_run_at = current_timestamp();
+
+
 CREATE OR REPLACE TEMP VIEW silver_typed AS
 SELECT
-    sha2(concat_ws('||',
-        CAST(VendorID AS STRING),
-        CAST(lpep_pickup_datetime AS STRING),
-        CAST(lpep_dropoff_datetime AS STRING),
-        CAST(PULocationID AS STRING),
-        CAST(DOLocationID AS STRING),
-        CAST(trip_distance AS STRING),
-        CAST(fare_amount AS STRING)
-    ), 256) AS trip_hash,
+    -- to_json with ignoreNullFields=false rather than concat_ws: concat_ws
+    -- silently DROPS null arguments, so a null in any identity input
+    -- shifts the remaining values left and lets two genuinely different
+    -- trips produce one hash -- which would quarantine real trips. There
+    -- are no nulls in these seven columns today, so this changes hash
+    -- values without changing the collision outcome (still 7 groups,
+    -- 14 rows), and it is cheapest to change now, before anything
+    -- downstream persists the hash.
+    sha2(to_json(struct(
+        VendorID,
+        lpep_pickup_datetime,
+        lpep_dropoff_datetime,
+        PULocationID,
+        DOLocationID,
+        trip_distance,
+        fare_amount
+    ), map('ignoreNullFields', 'false')), 256) AS trip_hash,
 
     CAST(VendorID AS INT) AS vendor_id,
     lpep_pickup_datetime AS pickup_datetime_local,
     lpep_dropoff_datetime AS dropoff_datetime_local,
-    unix_timestamp(lpep_dropoff_datetime) - unix_timestamp(lpep_pickup_datetime) AS trip_duration_seconds,
+    -- timestampdiff, not unix_timestamp: unix_timestamp resolves a
+    -- TIMESTAMP_NTZ through the SESSION timezone, so a trip crossing
+    -- 02:00 on 8 March 2026 (NYC DST start) gets a different duration on
+    -- a UTC cluster than on an America/New_York one. This is wall-clock
+    -- elapsed time, independent of session state.
+    timestampdiff(SECOND, lpep_pickup_datetime, lpep_dropoff_datetime) AS trip_duration_seconds,
     store_and_fwd_flag,
     CAST(RatecodeID AS INT) AS rate_code_id,
     CAST(PULocationID AS INT) AS pickup_location_id,
@@ -49,19 +69,42 @@ SELECT
     CAST(trip_type AS INT) AS trip_type_id,
     CAST(congestion_surcharge AS DECIMAL(18,2)) AS congestion_surcharge_amount_usd,
     CAST(cbd_congestion_fee AS DECIMAL(18,2)) AS cbd_congestion_fee_amount_usd,
-    source_system, source_file, ingested_at, batch_id
+    -- content_sha256 identifies WHICH VERSION of the source file this row
+    -- came from, so a Silver row stays traceable to a specific landed file
+    -- rather than only to the batch that loaded it.
+    source_system, source_file, content_sha256, ingested_at, batch_id,
+    silver_run_at AS silver_processed_at
 FROM `ftw-week-08`.`02-bronze`.green_taxi_raw;
 
 
 -- Step 2: quality flags + collision count (trip_hash computed above, untouched)
+-- Every flag is COALESCEd to false so it is strictly two-valued. Without
+-- it, a null input makes the flag null, and a downstream
+-- `WHERE NOT some_flag` silently drops those rows -- NOT NULL is NULL,
+-- not true. This is not hypothetical: 18,754 rows (14%) have a null
+-- passenger_count, as the Bronze gate measures every run.
+--
+-- A flag therefore means "we know this row has this problem". Not knowing
+-- is a different statement, so passenger_count_missing_flag carries it
+-- explicitly instead of being collapsed into false.
+--
+-- passenger_count = 0 counts as MISSING, not implausible. Profiling the
+-- three source files shows it is a vendor reporting convention rather
+-- than a data error: vendor 6 reports null for 100% of its 14,181 trips
+-- and vendor 1 writes 0 on 14.28% of its trips, while the trips
+-- themselves are ordinary (median fare $14.90 against $14.20 for trips
+-- with a recorded count). Leaving 0 unflagged would let AVG and SUM over
+-- passenger_count average those zeros in while dropping the nulls, which
+-- biases every passenger measure low.
 CREATE OR REPLACE TEMP VIEW silver_decided AS
 SELECT *,
     COUNT(*) OVER (PARTITION BY trip_hash) AS collision_count,
-    (fare_amount_usd < 0) AS negative_fare_flag,
-    (trip_distance_miles < 0) AS negative_distance_flag,
-    (dropoff_datetime_local < pickup_datetime_local) AS dropoff_before_pickup_flag,
-    (trip_duration_seconds <= 0 OR trip_duration_seconds > 86400) AS implausible_duration_flag,
-    (passenger_count < 0 OR passenger_count > 8) AS implausible_passenger_count_flag
+    COALESCE(fare_amount_usd < 0, false) AS negative_fare_flag,
+    COALESCE(trip_distance_miles < 0, false) AS negative_distance_flag,
+    COALESCE(dropoff_datetime_local < pickup_datetime_local, false) AS dropoff_before_pickup_flag,
+    COALESCE(trip_duration_seconds <= 0 OR trip_duration_seconds > 86400, false) AS implausible_duration_flag,
+    COALESCE(passenger_count < 0 OR passenger_count > 8, false) AS implausible_passenger_count_flag,
+    (passenger_count IS NULL OR passenger_count = 0) AS passenger_count_missing_flag
 FROM silver_typed;
 
 
