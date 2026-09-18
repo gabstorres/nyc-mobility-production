@@ -1,23 +1,21 @@
--- ============================================================
--- Gold: dim_hour
+-- Gold dimension: dim_hour (issue #36). Hour-of-day seed dimension -- a
+-- fixed, constant 24-row domain, independent of any Bronze/Silver data.
+-- Full rebuild (CREATE OR REPLACE): nothing here can ever need history.
 --
--- Stage:     05 Gold
--- Runs after: Integration gate
--- Target:    `ftw-week-08`.`05-gold`.dim_hour
--- Grain:     one row per hour of day, 0 through 23
--- Contract:  docs/data_model.md, docs/source_to_target_mapping.md
--- Owner:     TODO
---
--- Dimensions are built before facts; facts resolve keys only against built dimensions.
--- ============================================================
-
--- To implement:
---   - hour_key equals hour_of_day, exactly 24 rows
---   - zero-padded hour label and the approved time-of-day band
---   - deterministic 24-row seed
-
--- ------------------------------------------------------------
--- Remove this block when the query above is implemented. It keeps an
--- unfinished stage from looking successful in a Databricks job run.
--- ------------------------------------------------------------
-SELECT raise_error('11_dim_hour.sql is not implemented yet');
+-- Grain: one row per hour of the local day (0-23).
+-- SCD: Type 0 / full rebuild -- static reference data.
+CREATE OR REPLACE TABLE `ftw-week-08`.`05-gold`.dim_hour AS
+WITH hour_seed AS (
+    SELECT explode(sequence(0, 23)) AS hour_of_day
+)
+SELECT
+    hour_of_day AS hour_key, -- deterministic PK, equal to hour_of_day per mapping doc
+    hour_of_day,
+    concat(lpad(CAST(hour_of_day AS STRING), 2, '0'), ':00') AS hour_label,
+    CASE
+        WHEN hour_of_day BETWEEN 0 AND 5  THEN 'overnight'
+        WHEN hour_of_day BETWEEN 6 AND 11 THEN 'morning'
+        WHEN hour_of_day BETWEEN 12 AND 17 THEN 'afternoon'
+        ELSE 'evening' -- 18-23
+    END AS time_of_day_band
+FROM hour_seed;
