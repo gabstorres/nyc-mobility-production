@@ -5,6 +5,7 @@ from src.ingestion.batch_tracking import (
     mark_batch_success,
     mark_batch_failed,
 )
+from src.ingestion.schema_drift_check import get_schema
 
 LANDING_PATH = "/Volumes/ftw-week-08/00-source/group_a_source/green_taxi/"
 BRONZE_TABLE = "`ftw-week-08`.`02-bronze`.green_taxi_raw"
@@ -33,6 +34,19 @@ def already_succeeded(spark, content_hash, source_system=SOURCE_SYSTEM):
     return result > 0
 
 
+def get_reference_schema(spark, bronze_table=BRONZE_TABLE):
+    """
+    Schema of whatever's already successfully landed in Bronze, to compare
+    new files against. Returns {} if Bronze is empty (nothing to compare
+    against yet — the first-ever file always passes).
+    """
+    row_count = spark.sql(f"SELECT COUNT(*) AS cnt FROM {bronze_table}").collect()[0]["cnt"]
+    if row_count == 0:
+        return {}
+    df = spark.sql(f"SELECT * FROM {bronze_table} LIMIT 0")
+    return {field.name: field.dataType.simpleString() for field in df.schema.fields}
+
+
 def ingest_file(spark, dbutils, file_path, source_period, bronze_table=BRONZE_TABLE):
     """
     Ingest one file into Bronze, with full batch tracking.
@@ -53,6 +67,22 @@ def ingest_file(spark, dbutils, file_path, source_period, bronze_table=BRONZE_TA
     mark_batch_started(spark, batch_id)
 
     try:
+        # Schema drift check — compare this file against what's already in
+        # Bronze BEFORE loading it, so drift is caught prior to any COPY INTO.
+        new_schema = get_schema(spark, file_path)
+        reference_schema = get_reference_schema(spark, bronze_table)
+        provenance_cols = {"source_system", "source_file", "ingested_at", "batch_id"}
+        reference_schema = {k: v for k, v in reference_schema.items() if k not in provenance_cols}
+
+        if reference_schema:
+            drift = {
+                col: {"new_file": new_schema.get(col, "MISSING"), "bronze_reference": reference_schema.get(col, "MISSING")}
+                for col in set(new_schema) | set(reference_schema)
+                if new_schema.get(col) != reference_schema.get(col)
+            }
+            if drift:
+                raise Exception(f"Schema drift detected vs. existing Bronze data: {drift}")
+
         spark.sql(f"""
             COPY INTO {bronze_table}
             FROM (
@@ -80,6 +110,13 @@ def ingest_file(spark, dbutils, file_path, source_period, bronze_table=BRONZE_TA
         return batch_id
 
     except Exception as e:
+        # COPY INTO may have already committed rows before the failure
+        # (e.g. the row-count check below it failing). Since COPY INTO
+        # tracks file-level completion internally, a retry with a new
+        # batch_id would otherwise be silently skipped by COPY INTO,
+        # leaving this file permanently stuck. Clean up any partially
+        # loaded rows so a retry starts from a genuinely clean slate.
+        spark.sql(f"DELETE FROM {bronze_table} WHERE batch_id = '{batch_id}'")
         mark_batch_failed(spark, batch_id)
         print(f"FAILED — {file_path}: {e}")
         raise
