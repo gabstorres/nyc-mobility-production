@@ -88,30 +88,66 @@ Traffic advisories are optional and are not part of the required pipeline.
 
 ```text
 nyc-mobility-pipeline/
-├── README.md               # what this is, how to run it
-├── CONTRIBUTING.md
-├── databricks.yml          # the job: 30 tasks, dependencies enforce the gates
-├── requirements-dev.txt
-│
-├── .github/                # issue and PR templates, CI
-├── config/                 # non-secret project, naming and source configuration
-├── src/ingestion/          # unused, see "Known limitations"
-│
-├── etl/                    # the pipeline, in execution order
-│   ├── 01_control/         # control tables, the shared DQ contract, control gate
-│   ├── 02_bronze/          # one loader and one gate per source
-│   ├── 03_silver/          # one cleaner and one gate per source
-│   ├── 04_integration/     # trip-to-zone and trip-to-weather key maps, gate
-│   ├── 05_gold/            # four dimensions, two facts, gate
-│   └── 06_analytics/       # one dataset per business question, gate
-│
-├── notebooks/              # source profiling and investigation
-├── tests/                  # repository policy checks, run by CI
-│
-├── docs/                   # architecture, model, dictionary, decisions, validation
-│   └── model/              # star schema diagram
-│
-└── evidence/proof/         # incremental, idempotency, restart and full-run proofs
+
+├── README.md                 # project overview, setup, execution steps
+├── CONTRIBUTING.md           # contribution workflow and development rules
+├── databricks.yml            # Databricks Asset Bundle job definition and task graph
+├── requirements-dev.txt      # development dependencies
+
+├── .github/                  # CI pipeline, issue templates and PR templates
+
+├── config/                   # project configuration, naming rules and source definitions
+│   ├── naming.yml            # naming standards used across the project
+│   ├── project.json          # project-level configuration
+│   └── sources.json          # source system definitions
+
+├── dashboards/              # business-facing dashboards and dashboard assets
+│   ├── README.md            # dashboard documentation and usage notes
+│   └── 11_data_quality_dashboard/
+│       └── 10_NYC_mobility_data_quality_dashboard.lvdash.json
+│                             # Databricks dashboard definition
+
+├── docs/                    # architecture, model, validation and decision records
+│   ├── architecture.md
+│   ├── data_dictionary.md
+│   ├── data_model.md
+│   ├── decisions.md
+│   ├── ingestion.md
+│   ├── job_setup.md
+│   ├── naming_conventions.md
+│   ├── source_profile.md
+│   ├── source_to_target_mapping.md
+│   └── validation.md
+
+├── etl/                     # pipeline implementation in execution order
+│   ├── 01_control/          # control tables, run tracking, shared DQ contract and control gate
+│   ├── 02_bronze/           # source ingestion and Bronze validation gates
+│   ├── 03_silver/           # cleaning, standardization and Silver validation gates
+│   ├── 04_integration/      # trip-to-zone and trip-to-weather relationship resolution
+│   ├── 05_gold/             # dimensions, facts and Gold validation gate
+│   └── 06_analytics/        # business-question datasets and Analytics validation gate
+
+├── evidence/               # validation and operational proof artifacts
+│   └── proof/
+│       ├── 2026-09-19-failure-restart.md
+│       ├── 2026-09-19-full-pipeline-run.md
+│       ├── 2026-09-19-idempotency.md
+│       └── 2026-09-19-incremental.md
+
+├── notebooks/              # profiling, investigation and exploratory analysis
+│   ├── profile_green_taxi.ipynb
+│   ├── profile_weather.ipynb
+│   └── join_coverage_analysis.ipynb
+
+├── src/                    # reusable Python helpers
+│   └── ingestion/
+│       ├── batch_tracking.py
+│       └── schema_drift_check.py
+
+└── tests/                  # repository policy and automated test suite
+    ├── test_green_taxi_deduplication_policy.py
+    ├── test_notebook_source_format.py
+    └── test_repo_policy.py
 ```
 
 Each layer folder holds numbered files that run in order: loaders or transforms
