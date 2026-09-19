@@ -57,18 +57,40 @@ Source: `green_tripdata_2026-03.parquet`, `-04.parquet`, `-05.parquet`
 
 Target table: `` `ftw-week-08`.`02-bronze`.green_taxi_raw ``
 
-Entry point: `10_load_green_taxi.py`. The actual load logic lives in `src/ingestion/green_taxi.py`, imported and called from this thin notebook.
+Entry point: `10_load_green_taxi.sql`.
 
-Load strategy: Python, `COPY INTO`, one file at a time.
+Load strategy: SQL, one `INSERT` per run covering every unprocessed file. The
+folder is the source; no filename is hardcoded.
 
-1. Discover every file currently in the landing folder — no hardcoded filenames.
-2. Hash each file's content. Check `ingestion_batches` for a prior `SUCCESS` with that exact hash. If found, skip.
-3. Register the batch as `DISCOVERED`, mark `STARTED`.
-4. Run `COPY INTO` to load the file into Bronze, tagging every row with `source_system`, `source_file`, `ingested_at`, `batch_id`.
-5. Reconcile: source file row count must equal loaded row count for that `batch_id`.
-6. Mark `SUCCESS` with the row count, or `FAILED`.
+1. Read every Parquet file in the landing folder, tagging each row with the file
+   it came from via `_metadata`.
+2. Hash each file's content: a per-row digest, sorted and hashed per file, so the
+   result does not depend on read order.
+3. Select the files to process — those whose content hash has no `SUCCESS` batch,
+   or whose rows are not present in the target. The second condition matters when
+   Bronze is dropped but the control row survives.
+4. Demote any prior `SUCCESS` batch for that content to `SUPERSEDED` (D24), then
+   register one batch per file as `STARTED`.
+5. Delete any orphaned rows for that content. The insert and the reconciliation
+   below are separate statements, so a run can commit rows and then fail before
+   its batch closes; without this a restart would append a second copy.
+6. Insert the new files' rows in one statement, joined to their batch by content
+   hash.
+7. Reconcile: rows landed per file must equal rows in the source file, or the
+   stage raises and the batches stay `STARTED`.
+8. Close each batch as `SUCCESS` with the count actually landed.
 
-Rerun behavior: running against the same files again produces the same row count, with every file correctly skipped — proven by running ingestion twice in a row and confirming the second run reports zero new loads.
+Rerun behavior: a second run against the same files reports zero new files,
+registers no batch and writes no rows. Proven in
+`evidence/proof/2026-09-19-idempotency.md`.
+
+Incremental behavior: files arriving one month at a time are each loaded once,
+and earlier months' batch records are never rewritten. Proven in
+`evidence/proof/2026-09-19-incremental.md`.
+
+Known limitation: the landing path is a literal inside `read_files`, which cannot
+take a variable, so staging a subset of files for a test means moving files in
+the Volume rather than pointing the loader elsewhere.
 
 ## Weather ingestion
 
@@ -140,9 +162,15 @@ Validation:
 
 Mark a layer complete only after its load and validation both succeed — a technically-successful write is not enough on its own.
 
-**Green Taxi specific**: if validation fails *after* `COPY INTO` has already committed rows (e.g. the row-count check fails), those partially-loaded rows are deleted before the batch is marked `FAILED`. This matters because `COPY INTO` tracks file-level completion internally, independent of `batch_id` — without this cleanup, a retry using a new `batch_id` would be silently skipped by `COPY INTO` itself, since it already sees the file as loaded, leaving the file permanently stuck with no successful path forward.
+**Green Taxi specific**: the insert and the row-count reconciliation are separate
+statements, so a run can commit rows and then fail before its batch reaches
+`SUCCESS`. On the next run that file correctly looks unprocessed again, so the
+loader deletes any orphaned rows for that content before inserting. Without that
+step a restart would append a second copy of every row.
 
-Restart point on failure: re-run the same entry point notebook/script for that source. Each source's own change-detection logic (content hash for Taxi, business key for Weather, always-on-full-refresh for Zones) determines what actually gets reloaded — already-successful work is not redone.
+Restart point on failure: re-run the same file for that source, or use **Repair
+run** on the failed job run. Proven in
+`evidence/proof/2026-09-19-failure-restart.md`. Each source's own change-detection logic (content hash for Taxi, business key for Weather, always-on-full-refresh for Zones) determines what actually gets reloaded — already-successful work is not redone.
 
 Bronze success does not imply Silver success. A failed Silver step does not get silently skipped just because its Bronze batch succeeded.
 

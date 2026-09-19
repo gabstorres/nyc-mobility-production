@@ -17,7 +17,7 @@ This log explains why choices were made. Detailed implementation contracts live 
 - `docs/data_dictionary.md`
 - `docs/source_to_target_mapping.md`
 - `docs/naming_conventions.md`
-- `docs/model/nyc_mobility_star_schema.dbml`
+- `docs/model/nyc_mobility_star_schema.png`
 
 ## Decision register
 
