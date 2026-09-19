@@ -88,126 +88,52 @@ Traffic advisories are optional and are not part of the required pipeline.
 
 ```text
 nyc-mobility-pipeline/
-├── README.md
+├── README.md               # what this is, how to run it
 ├── CONTRIBUTING.md
-├── .gitignore
+├── databricks.yml          # the job: 30 tasks, dependencies enforce the gates
 ├── requirements-dev.txt
 │
-├── .github/
-│   ├── ISSUE_TEMPLATE/
-│   │   └── work_item.md
-│   ├── pull_request_template.md
-│   └── workflows/
-│       └── ci.yml
+├── .github/                # issue and PR templates, CI
+├── config/                 # non-secret project, naming and source configuration
+├── src/ingestion/          # unused, see "Known limitations"
 │
-├── config/
-│   ├── project.json
-│   ├── naming.yml
-│   └── sources.json
+├── etl/                    # the pipeline, in execution order
+│   ├── 01_control/         # control tables, the shared DQ contract, control gate
+│   ├── 02_bronze/          # one loader and one gate per source
+│   ├── 03_silver/          # one cleaner and one gate per source
+│   ├── 04_integration/     # trip-to-zone and trip-to-weather key maps, gate
+│   ├── 05_gold/            # four dimensions, two facts, gate
+│   └── 06_analytics/       # one dataset per business question, gate
 │
-├── src/
-│   └── ingestion/          # unused: the loaders are SQL, see "Known limitations"
-│       ├── __init__.py
-│       ├── batch_tracking.py
-│       └── schema_drift_check.py
+├── notebooks/              # source profiling and investigation
+├── tests/                  # repository policy checks, run by CI
 │
-├── etl/
-│   ├── README.md
-│   │
-│   ├── 01_control/
-│   │   ├── 00_create_control_tables.sql
-│   │   └── 90_validate_control.sql
-│   │
-│   ├── 02_bronze/
-│   │   ├── 10_load_green_taxi.sql
-│   │   ├── 20_load_open_meteo.sql
-│   │   ├── 30_load_taxi_zones.sql
-│   │   ├── 90_validate_green_taxi.sql
-│   │   ├── 90_validate_open_meteo_weather.sql
-│   │   └── 90_validate_taxi_zones.sql
-│   │
-│   ├── 03_silver/
-│   │   ├── 10_clean_green_taxi.sql
-│   │   ├── 20_clean_weather_hourly.sql
-│   │   ├── 30_clean_taxi_zones.sql
-│   │   ├── 90_validate_green_taxi.sql
-│   │   ├── 90_validate_weather_hourly.sql
-│   │   └── 90_validate_taxi_zones.sql
-│   │
-│   ├── 04_integration/
-│   │   ├── 10_resolve_trip_zones.sql
-│   │   ├── 20_resolve_trip_weather.sql
-│   │   └── 90_validate_integration.sql
-│   │
-│   ├── 05_gold/
-│   │   ├── 10_dim_date.sql
-│   │   ├── 11_dim_hour.sql
-│   │   ├── 12_dim_taxi_zone.sql
-│   │   ├── 13_dim_weather_classification.sql
-│   │   ├── 20_fact_weather_hourly.sql
-│   │   ├── 30_fact_taxi_trip.sql
-│   │   └── 90_validate_gold.sql
-│   │
-│   └── 06_analytics/
-│       ├── 10_activity_by_time_and_zone.sql
-│       ├── 20_trip_behavior_by_weather.sql
-│       ├── 30_mobility_patterns_by_zone.sql
-│       └── 90_validate_analytics.sql
+├── docs/                   # architecture, model, dictionary, decisions, validation
+│   └── model/              # star schema diagram
 │
-├── notebooks/
-│   ├── profile_green_taxi.ipynb
-│   └── profile_weather.ipynb
-│
-├── tests/
-│   ├── conftest.py
-│   ├── test_green_taxi_deduplication_policy.py
-│   ├── test_notebook_source_format.py
-│   └── test_repo_policy.py
-│
-├── docs/
-│   ├── architecture.md
-│   ├── naming_conventions.md
-│   ├── data_model.md
-│   ├── data_dictionary.md
-│   ├── source_profile.md
-│   ├── source_to_target_mapping.md
-│   ├── ingestion.md
-│   ├── validation.md
-│   ├── decisions.md
-│   └── model/
-│       ├── nyc_mobility_star_schema.dbml
-│       └── nyc_mobility_star_schema.png
-│
-└── evidence/
-    ├── README.md
-    └── proof/
+└── evidence/proof/         # incremental, idempotency, restart and full-run proofs
 ```
+
+Each layer folder holds numbered files that run in order: loaders or transforms
+first, then `90_validate_<source>` as that layer's gate. A gate raises on failure,
+so the task fails and everything downstream is skipped.
+
 
 ### Directory responsibilities
 
 | Location | Responsibility |
 |---|---|
 | `config/` | Approved non-secret project, naming, and source configuration |
-| `src/ingestion/` | Reusable Python for discovery, acquisition, metadata, and checkpoints |
-| `etl/` | Ordered executable Python and SQL tasks |
+| `src/ingestion/` | Unused. Superseded by the SQL loaders in `etl/02_bronze/` |
+| `etl/` | Ordered SQL tasks, one folder per pipeline stage |
 | `notebooks/` | Source profiling and limited investigation |
 | `tests/` | Policy, source-format, and reusable-code tests |
 | `docs/` | Canonical architecture, model, mapping, ingestion, and validation decisions |
 | `evidence/proof/` | Reviewed run, reconciliation, and rerun evidence |
 
-Reusable Python belongs in `src/ingestion/`. Files under `etl/` should be small
-runnable entry points or clearly scoped SQL transformations. Business logic
-must not be duplicated between `src/`, `etl/`, and notebooks.
-
-### File types under `etl/`
-
-| Type | Use it when | Form |
-|---|---|---|
-| `.py` | The step needs Python: file discovery, checksums, API calls, or batch tracking | Databricks source-format notebook (`# Databricks notebook source`) that calls `src/ingestion/` |
-| `.sql` | The step is a SQL transformation or validation | Plain SQL script, or a Databricks source-format SQL notebook (`-- Databricks notebook source`) when it needs markdown or several cells |
-
-Commit notebooks in source format, not `.ipynb`, so pull requests show readable
-diffs and no cell output is committed.
+Every file under `etl/` is SQL. Business logic lives there and is not duplicated
+into notebooks. Commit notebooks in Databricks source format, not `.ipynb`, so
+pull requests show readable diffs and no cell output is committed.
 
 ### Known limitations
 
