@@ -165,21 +165,27 @@ duckdb_summary = connection.execute(
 display(duckdb_summary)
 ```
 
-## DuckDB per-file reconciliation
+## Per-file Reconciliation
 
-DuckDB independently calculated the row count for each parquet file.
+| Source File | Bronze Rows | DuckDB Rows | Bronze Fare Sum | DuckDB Fare Sum | Bronze Total Amount | DuckDB Total Amount | Match |
+|---|---:|---:|---:|---:|---:|---:|---|
+| green_tripdata_2026-03.parquet | 44,208 | 44,208 | 713,060.73 | 713,060.73 | 1,101,097.20 | 1,101,097.20 | ✅ |
+| green_tripdata_2026-04.parquet | 44,238 | 44,238 | 737,820.54 | 737,820.54 | 1,123,908.24 | 1,123,908.24 | ✅ |
+| green_tripdata_2026-05.parquet | 44,921 | 44,921 | 797,569.03 | 797,569.03 | 1,164,525.45 | 1,164,525.45 | ✅ |
 
-| Source file | DuckDB row count |
-|---|---:|
-| `green_tripdata_2026-03.parquet` | 44,208 |
-| `green_tripdata_2026-04.parquet` | 44,238 |
-| `green_tripdata_2026-05.parquet` | 44,921 |
-| Total | 133,367 |
+All file-level metrics matched exactly between Bronze and DuckDB.
 
-The per-file counts reconcile to the combined DuckDB result:
+### Bronze per-file reproduction query
 
-```text
-44,208 + 44,238 + 44,921 = 133,367
+```sql
+SELECT
+    source_file,
+    COUNT(*) AS row_count,
+    ROUND(SUM(fare_amount), 2) AS fare_amount_sum,
+    ROUND(SUM(total_amount), 2) AS total_amount_sum
+FROM `ftw-week-08`.`02-bronze`.green_taxi_raw
+GROUP BY source_file
+ORDER BY source_file;
 ```
 
 ### DuckDB per-file reproduction command
@@ -210,11 +216,11 @@ duckdb_per_file = connection.execute(
 display(duckdb_per_file)
 ```
 
-## Source file checksums
+## Bronze lineage checksums
 
-The Bronze lineage records a SHA-256 content checksum for every Green Taxi source-file version.
-
-Replace the placeholders below with the complete 64-character values returned by the checksum query before committing this evidence.
+The Bronze lineage records a content-derived SHA-256 value for every Green Taxi source-file version.
+ 
+Bronze `content_sha256` is produced from a stable aggregation of sorted row digests in the Green Taxi Bronze load. It identifies the parsed dataset content used by Bronze. It is not a SHA-256 hash of the physical parquet file bytes.
 
 | Source file | `content_sha256` |
 |---|---|
@@ -222,7 +228,7 @@ Replace the placeholders below with the complete 64-character values returned by
 | `green_tripdata_2026-04.parquet` | `bcf3369ddb968a3212d9119aac726d88633ad521ed58cc777f7f2a33308f88fa` |
 | `green_tripdata_2026-05.parquet` | `0528deb8a4eb3e71b57f2d7b632534ea3071f938650143efbfb06e56a4fcafc7` |
 
-### Checksum extraction query
+###  Bronze lineage-checksum query
 
 ```sql
 SELECT
@@ -245,11 +251,22 @@ SELECT
 FROM `ftw-week-08`.`02-bronze`.green_taxi_raw;
 ```
 
-The expected result is one distinct checksum for each of the three source files.
+The result confirms that Bronze contains three distinct source files and three distinct content-derived file versions.
 
-## Optional independent checksum reproduction
+## Independent physical-file checksums
 
-The source-file checksums can also be recalculated directly from the physical parquet files in the Databricks Python notebook.
+The following checksums are calculated from the raw bytes of the physical parquet files.
+
+These values are intentionally separate from Bronze `content_sha256`.
+
+| Checksum type | Input being hashed | Purpose |
+|---|---|---|
+| Bronze `content_sha256` | Stable aggregation of sorted row digests | Identifies the parsed dataset content loaded into Bronze |
+| Physical-file SHA-256 | Raw parquet file bytes | Identifies the exact physical parquet artifact |
+
+Because these checksum methods hash different representations, their values are not expected to match.
+
+### Independent checksum reproduction command
 
 ```python
 import glob
@@ -273,20 +290,39 @@ def sha256_file(file_path):
 
 source_files = sorted(glob.glob(source_glob))
 
-checksum_results = pd.DataFrame(
+file_checksum_results = pd.DataFrame(
     [
         {
             "source_file": os.path.basename(file_path),
-            "content_sha256": sha256_file(file_path),
+            "file_sha256": sha256_file(file_path),
         }
         for file_path in source_files
     ]
 )
 
-display(checksum_results)
+display(file_checksum_results)
 ```
 
-The independently calculated hashes should match the corresponding `content_sha256` values recorded in Bronze.
+### Observed physical-file checksums
+
+Copy the actual three values displayed by the Python command into this table:
+
+| Source file | Physical-file SHA-256 |
+|---|---|
+| `green_tripdata_2026-03.parquet` | `60c8bdfc0aa7826a2d6d2a6cca0f0e0dcb2d8aa7336212a45382794bb55b9cc0` |
+| `green_tripdata_2026-04.parquet` | `e8dd2a0afde3fe8be942dd638fe1d946f8edbe5b377cf6c1d645e1206b3c7662` |
+| `green_tripdata_2026-05.parquet` | `15ff57840a1103d49298ad244492730ca4236b4de0d2758a689ded08bc332752` |
+
+These physical-file checksums identify the exact parquet artifacts used in the independent DuckDB reconciliation. They are recorded separately from the Bronze content-derived lineage values.
+``
+
+
+
+The file-level SHA-256 values calculated directly from the parquet files are not expected to match Bronze's `content_sha256` values.
+
+Bronze computes `content_sha256` using a sorted row-digest aggregation as part of the Bronze load process, while the independent file checksums are calculated from the raw parquet file bytes.
+
+Both values provide lineage evidence, but they represent different hashing strategies and should not be compared directly.
 
 ## Final comparison
 
@@ -374,36 +410,14 @@ The two paths share only the intended original source-file set.
 |---|---|---|
 | Reconcile Bronze against a second engine | Databricks Bronze compared with DuckDB 1.1.3 | Satisfied |
 | Use the same source files | Both paths represent the March, April, and May 2026 Green Taxi files | Satisfied |
-| Compare row count per file | DuckDB returned 44,208, 44,238, and 44,921 rows | Satisfied |
+| Compare row count per file | Bronze and DuckDB both returned 44,208, 44,238, and 44,921 rows for March, April, and May | Satisfied |
 | Compare combined row count | Bronze and DuckDB both returned 133,367 | Satisfied |
 | Compare `SUM(fare_amount)` | Bronze and DuckDB both returned 2,248,450.30 | Satisfied |
 | Compare `SUM(total_amount)` | Bronze and DuckDB both returned 3,389,530.89 | Satisfied |
 | Compare file versions | Bronze and DuckDB both identified 3 source files | Satisfied |
-| Record source-file checksums | Query and checksum table are included | Pending placeholder replacement |
+| Record source-file checksums | Bronze content-derived lineage values and independent physical-file SHA-256 values are recorded separately | Satisfied |
 | Include reproduction commands | Databricks SQL and DuckDB commands are included | Satisfied |
 | Save proof under `evidence/proof/` | This evidence file | Satisfied |
-
-## Final verification before commit
-
-Complete these checks before committing the evidence:
-
-1. Replace all three checksum placeholders with the complete SHA-256 values.
-2. Search this file for `PASTE_`.
-3. Confirm the search returns zero results.
-4. Confirm each checksum contains 64 hexadecimal characters.
-5. Confirm the Bronze figures still match the recorded query results.
-6. Confirm the DuckDB figures still match the recorded notebook output.
-7. Change the status at the top from:
-
-```text
-Status: Reconciliation complete; checksum transcription pending
-```
-
-to:
-
-```text
-Status: Resolved
-```
 
 ## Conclusion
 
@@ -429,4 +443,4 @@ Total:      133,367
 
 The zero variances provide evidence that Bronze ingestion loaded the expected Green Taxi source records without measurable row loss, duplication, source-file omission, or financial-measure drift.
 
-Issue #123 is ready to close after the three checksum placeholders are replaced with the full values returned by the checksum query.
+Issue#123 is resolved. Bronze and DuckDB produced identical combined and per-file reconciliation figures, while the Bronze content-derived lineage values and physical-file SHA-256 checksums are documented separately according to their distinct hashing strategies.
