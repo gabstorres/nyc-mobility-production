@@ -283,6 +283,29 @@ def run_checks(connection, contract):
             details="Trip distance must be zero or greater.",
         )
     )
+    negative_fare_amount = scalar(
+        connection,
+        """
+        SELECT COUNT(*)
+        FROM green_taxi_source
+        WHERE fare_amount < 0
+        """,
+    )
+
+    results.append(
+        create_result(
+            check_name="fare_amount_non_negative",
+            check_type="RANGE",
+            severity="WARN",
+            fail_count=negative_fare_amount,
+            total_count=total_rows,
+            threshold_pct=0.1,
+            details=(
+                "Negative fare amounts are flagged. "
+                "A maximum failure rate of 0.1% is tolerated."
+            ),
+        )
+    )
 
     # 8. Drop-off after pickup
     invalid_trip_order = scalar(
@@ -675,7 +698,7 @@ def main():
         print("MISSING_OR_UNREADABLE_INPUT")
         print(str(error))
         connection.close()
-        return 2
+        return 3
 
     results = run_checks(
         connection,
