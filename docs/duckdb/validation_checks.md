@@ -15,3 +15,7 @@
 13. ratecode_id_domain
 14. location_id_range
 15. full_source_row_duplicate
+
+The source gate validates local parquet inputs supplied through the --input parameter.
+
+The validation suite does not download source files and does not require network connectivity or credentials.

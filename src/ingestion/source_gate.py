@@ -7,7 +7,6 @@ import duckdb
 
 
 CONTRACT_PATH = Path("config/source_contract.json")
-SOURCES_PATH = Path("config/sources.json")
 DEFAULT_EVIDENCE_PATH = Path(
     "evidence/proof/source-validation/results.json"
 )
@@ -18,13 +17,6 @@ def load_json(path):
         return json.load(file)
 
 
-def load_green_taxi_inputs():
-    sources = load_json(SOURCES_PATH)
-
-    return [
-        source_file["url"]
-        for source_file in sources["taxi"]["bootstrap_files"]
-    ]
 
 
 def sql_list(values):
@@ -619,10 +611,9 @@ def parse_arguments():
     parser.add_argument(
         "--input",
         nargs="+",
+        required=True,
         help=(
-            "One or more local parquet paths, globs, "
-            "or URLs. When omitted, Green Taxi URLs "
-            "are read from config/sources.json."
+            "One or more local parquet paths or glob patterns."
         ),
     )
 
@@ -649,17 +640,29 @@ def main():
         )
         return 2
 
-    inputs = (
-        args.input
-        or load_green_taxi_inputs()
+        inputs = args.input
+        network_prefixes = (
+        "http://",
+        "https://",
+        "s3://",
+        "r2://",
     )
 
-    if not inputs:
-        print(
-            "MISSING_INPUT: No Green Taxi inputs "
-            "were provided."
-        )
-        return 2
+    for input_path in inputs:
+        if input_path.lower().startswith(network_prefixes):
+            print(
+                "NETWORK_INPUT_NOT_ALLOWED: "
+                "Only local files may be validated."
+            )
+            return 2
+
+
+        if not inputs:
+            print(
+                "MISSING_INPUT: No Green Taxi inputs "
+                "were provided."
+            )
+            return 2
 
     connection = duckdb.connect()
 
