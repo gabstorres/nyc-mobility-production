@@ -1,0 +1,22 @@
+{
+  "green_taxi": {
+    "required_columns": [
+      "VendorID",
+      "lpep_pickup_datetime",
+      "lpep_dropoff_datetime",
+      "PULocationID",
+      "DOLocationID",
+      "fare_amount",
+      "trip_distance"
+    ],
+    "required_fields": [
+      "lpep_pickup_datetime",
+      "lpep_dropoff_datetime"
+    ],
+    "row_count_floor": 1,
+    "reporting_window": {
+      "start": "2026-03-01",
+      "end": "2026-05-31"
+    }
+  }
+}

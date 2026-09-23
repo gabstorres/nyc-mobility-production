@@ -1,0 +1,178 @@
+{
+  "source": "green_taxi",
+  "inputs": [
+    "https://d37ci6vzurychx.cloudfront.net/trip-data/green_tripdata_2026-03.parquet",
+    "https://d37ci6vzurychx.cloudfront.net/trip-data/green_tripdata_2026-04.parquet",
+    "https://d37ci6vzurychx.cloudfront.net/trip-data/green_tripdata_2026-05.parquet"
+  ],
+  "check_count": 15,
+  "gate_result": "ACCEPTED",
+  "exit_code": 0,
+  "results": [
+    {
+      "check_name": "source_readable",
+      "check_type": "AVAILABILITY",
+      "severity": "BLOCK",
+      "status": "PASS",
+      "fail_count": 0,
+      "total_count": 1,
+      "fail_pct": 0.0,
+      "threshold_pct": 0.0,
+      "details": "DuckDB successfully opened all configured Green Taxi source files."
+    },
+    {
+      "check_name": "row_count_not_empty",
+      "check_type": "VOLUME",
+      "severity": "BLOCK",
+      "status": "PASS",
+      "fail_count": 0,
+      "total_count": 1,
+      "fail_pct": 0.0,
+      "threshold_pct": 0.0,
+      "details": "Observed source rows: 133367."
+    },
+    {
+      "check_name": "row_count_floor",
+      "check_type": "VOLUME",
+      "severity": "BLOCK",
+      "status": "PASS",
+      "fail_count": 0,
+      "total_count": 1,
+      "fail_pct": 0.0,
+      "threshold_pct": 0.0,
+      "details": "Observed rows: 133367; required minimum: 1."
+    },
+    {
+      "check_name": "required_columns",
+      "check_type": "SCHEMA",
+      "severity": "BLOCK",
+      "status": "PASS",
+      "fail_count": 0,
+      "total_count": 7,
+      "fail_pct": 0.0,
+      "threshold_pct": 0.0,
+      "details": "All required columns are present."
+    },
+    {
+      "check_name": "pickup_timestamp_not_null",
+      "check_type": "NOT_NULL",
+      "severity": "BLOCK",
+      "status": "PASS",
+      "fail_count": 0,
+      "total_count": 133367,
+      "fail_pct": 0.0,
+      "threshold_pct": 0.0,
+      "details": "Pickup timestamp is required."
+    },
+    {
+      "check_name": "dropoff_timestamp_not_null",
+      "check_type": "NOT_NULL",
+      "severity": "BLOCK",
+      "status": "PASS",
+      "fail_count": 0,
+      "total_count": 133367,
+      "fail_pct": 0.0,
+      "threshold_pct": 0.0,
+      "details": "Drop-off timestamp is required."
+    },
+    {
+      "check_name": "trip_distance_non_negative",
+      "check_type": "RANGE",
+      "severity": "BLOCK",
+      "status": "PASS",
+      "fail_count": 0,
+      "total_count": 133367,
+      "fail_pct": 0.0,
+      "threshold_pct": 0.0,
+      "details": "Trip distance must be zero or greater."
+    },
+    {
+      "check_name": "dropoff_after_pickup",
+      "check_type": "CONSISTENCY",
+      "severity": "WARN",
+      "status": "WARN",
+      "fail_count": 100,
+      "total_count": 133367,
+      "fail_pct": 0.075,
+      "threshold_pct": 0.1,
+      "details": "Drop-off should occur after pickup. A maximum failure rate of 0.1% is tolerated."
+    },
+    {
+      "check_name": "expected_month_coverage",
+      "check_type": "DATE_COVERAGE",
+      "severity": "WARN",
+      "status": "WARN",
+      "fail_count": 11,
+      "total_count": 133367,
+      "fail_pct": 0.0082,
+      "threshold_pct": 0.1,
+      "details": "Expected reporting window: 2026-03-01 through 2026-05-31, inclusive."
+    },
+    {
+      "check_name": "passenger_count_gt_8",
+      "check_type": "RANGE",
+      "severity": "WARN",
+      "status": "WARN",
+      "fail_count": 13,
+      "total_count": 133367,
+      "fail_pct": 0.0097,
+      "threshold_pct": 0.1,
+      "details": "Passenger counts above 8 are flagged. A maximum failure rate of 0.1% is tolerated."
+    },
+    {
+      "check_name": "vendor_id_domain",
+      "check_type": "DOMAIN",
+      "severity": "WARN",
+      "status": "PASS",
+      "fail_count": 0,
+      "total_count": 133367,
+      "fail_pct": 0.0,
+      "threshold_pct": 0.1,
+      "details": "Expected VendorID values are 1, 2, and 6."
+    },
+    {
+      "check_name": "payment_type_domain",
+      "check_type": "DOMAIN",
+      "severity": "WARN",
+      "status": "PASS",
+      "fail_count": 0,
+      "total_count": 133367,
+      "fail_pct": 0.0,
+      "threshold_pct": 0.1,
+      "details": "Expected payment_type values are 0 through 6."
+    },
+    {
+      "check_name": "ratecode_id_domain",
+      "check_type": "DOMAIN",
+      "severity": "WARN",
+      "status": "PASS",
+      "fail_count": 0,
+      "total_count": 133367,
+      "fail_pct": 0.0,
+      "threshold_pct": 0.1,
+      "details": "Expected RatecodeID values are 1 through 6 and 99."
+    },
+    {
+      "check_name": "location_id_range",
+      "check_type": "RANGE",
+      "severity": "WARN",
+      "status": "PASS",
+      "fail_count": 0,
+      "total_count": 133367,
+      "fail_pct": 0.0,
+      "threshold_pct": 0.1,
+      "details": "Pickup and drop-off LocationID values must be between 1 and 265."
+    },
+    {
+      "check_name": "full_source_row_duplicate",
+      "check_type": "DUPLICATE",
+      "severity": "WARN",
+      "status": "PASS",
+      "fail_count": 0,
+      "total_count": 133367,
+      "fail_pct": 0.0,
+      "threshold_pct": 0.1,
+      "details": "Identical source rows are measured before the Silver duplicate policy is applied."
+    }
+  ]
+}
